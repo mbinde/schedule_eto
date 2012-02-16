@@ -2773,6 +2773,8 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 	    && ($appointment->tutor_uid == $form_state['values']['canceling_uid'] ) ) ) {
     if ($form_state['values']['appointment_event_id']) {
 
+      $isa_series = 0;
+
       $event = sb_appointment_event_load(array(
                  'appointment_event_id' => $form_state['values']['appointment_event_id']));
       sb_appointment_event_cancel($form_state['values']['appointment_event_id']);
@@ -2781,8 +2783,14 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
       date_timezone_set($date, timezone_open(user_tz()));
       $date_string = "on " . date_format($date, DATE_FORMAT_ETO_LONG) . " at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
     } else {
+      $isa_series = 1;
 
-      $event = $appointment;
+      // for our "event", use the first cancelled one in a series
+      $events = sb_appointment_event_load(array(
+                  'appointment_id' => $form_state['values']['appointment_id'],
+                  'from_date' => date(DATE_FORMAT_DATETIME)));
+      $event = $events[0];
+
       sb_appointment_cancel($form_state['values']['appointment_id']);
 
       $date = date_make_date($event->start_datetime_utc, "UTC");
@@ -2791,23 +2799,7 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
     }
 
     // this is an event cancellation by either party for a tutor session or the tutor for
-    // a group session, so send out emails as well
-
-
-    // FIXME:
-    // only send out emails if the event was within 6 hours or in the future
-    /*
-    $now = date_make_date(time(), 'UTC');
-    $interval = new DateInterval('PT' . variable_get('eto_minimum_appointment_lead_time', 6) . 'H');
-    date_sub ($now, $interval);
-    $event_date = date_make_date($event->start_datetime_utc, "UTC");
-    if ($now < $event_date) {
-      // this is okay to email
-      //      watchdog('eto_notifications', 'now < event_date');
-    } else {
-      //      watchdog('eto_notifications', 'now >= event_date');
-    }
-    */
+    // a group session, so send out emails
 
     $tutor = eto_user_load($appointment->tutor_uid);
     $u = eto_user_load($appointment->student_uid_0);
@@ -2828,7 +2820,7 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 			  'start_time' => $start_time,
 			  'end_time' => $end_time);
       watchdog('eto_notifications',
-	       'Emailing contirmation to @tutor_name (@tutor_id)',
+	       'Emailing cancellation to @tutor_name (@tutor_id)',
 	       array('@tutor_name' => $tutor->name,
 		     '@tutor_id' => $tutor->uid));
 
@@ -2841,8 +2833,14 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 		 array('@tutor_name' => $tutor->name,
 		       '@tutor_id' => $tutor->uid));
 
+        if ($isa_series) {
+          $message = "ETO standing appointment cancelled $short_app_date $start_time - $end_time - " . $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
+        }
+        else {
+          $message = "ETO appointment cancelled $short_app_date $start_time - $end_time - " . $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
+        }
 	$texts[] = array ('uid' => $tutor->uid,
-			  'message' => "ETO session cancelled $short_app_date $start_time - $end_time - " . $u->eto_profile->first_name . " " . $u->eto_profile->last_name,
+			  'message' => $message,
 			  );
       }
     }
@@ -2908,13 +2906,24 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 			'end_time' => $m['end_time'],
 			'notes' => check_plain($form_state['values']['body']));
 	if (preg_match(EMAIL_REGEX, $m['email']) === 1) {
-	  drupal_mail("eto_admin",
-		      "session_cancellation",
-		      $m['email'],
-		      language_default(),
-		      $params,
-		      variable_get('site_mail', 'admin@elitetutorsonline.com'),
-		      TRUE);
+          if ($isa_series) {
+            drupal_mail("eto_admin",
+              "session_cancellation_future",
+              $m['email'],
+              language_default(),
+              $params,
+              variable_get('site_mail', 'admin@elitetutorsonline.com'),
+              TRUE);
+          }
+          else {
+            drupal_mail("eto_admin",
+              "session_cancellation",
+              $m['email'],
+              language_default(),
+              $params,
+              variable_get('site_mail', 'admin@elitetutorsonline.com'),
+              TRUE);
+          }
 	}
       }
     }
@@ -2957,9 +2966,12 @@ function sb_appointment_cancel ($appointment_id) {
   $events = sb_appointment_event_load(array(
               'appointment_id' => $appointment_id,
               'from_date' => date(DATE_FORMAT_DATETIME)));
+  print_r2($events);exit;
   foreach ($events as $e) {
-    sb_appointment_event_cancel($e->appointment_event_id);
+    print_r2($e);
+    //    sb_appointment_event_cancel($e->appointment_event_id);
   }
+  exit;
 
 }
 

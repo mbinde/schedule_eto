@@ -1224,7 +1224,7 @@ function sb_schedule_event_load ($args) {
       $result = db_query("SELECT sse.*, ss.uid
                           FROM {sb_schedule_event} AS sse
                           INNER JOIN {sb_schedule} AS ss ON sse.schedule_id = ss.schedule_id
-                          WHERE $field = %d" . $date_where_clause,
+                          WHERE $field = %d" . $date_where_clause . ' ORDER BY sae.start_datetime_utc',
                 $id, $from_date);
       while ($row = db_fetch_object($result)) {
 	$data[] = $row;
@@ -1507,6 +1507,7 @@ function sb_appointment_event_load ($args) {
     $from_date = '';
   }
 
+
   if ($id > 0) {
     if ($field == 'sae.appointment_event_id') {
       $result = db_fetch_object(db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag,
@@ -1526,7 +1527,7 @@ function sb_appointment_event_load ($args) {
                                                  sa.hourly_rate, sa.rate_override
                                         FROM {sb_appointment_event} AS sae
                                           INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
-                                        WHERE $field = %d" . $date_where_clause,
+                                        WHERE $field = %d" . $date_where_clause . ' ORDER BY sae.start_datetime_utc',
                 $id, $form_date);
       while ($row = db_fetch_object($result)) {
         $data[] = $row;
