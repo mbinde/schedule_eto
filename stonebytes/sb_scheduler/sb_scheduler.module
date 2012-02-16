@@ -1490,20 +1490,52 @@ function sb_appointment_next_appointment_load($uid, $date, $active = FALSE) {
 
 function sb_appointment_event_load ($args) {
   if ($args['appointment_event_id']) {
-    $field = 'sse.appointment_event_id';
+    $field = 'sae.appointment_event_id';
     $id = $args['appointment_event_id'];
   } else if ($args['appointment_id']) {
-    $field = 'sse.appointment_id';
+    $field = 'sae.appointment_id';
     $id = $args['appointment_id'];
   }
 
+  if ($args['from_date']) {
+    // return a list of all events in a schedule after a given date
+    $date_where_clause = ' AND sae.start_datetime_utc >= \'%s\'';
+    $from_date = $args['from_date'];
+  }
+  else {
+    $date_where_clause = '';
+    $from_date = '';
+  }
+
   if ($id > 0) {
-    $result = db_fetch_object(db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag, sa.title, sa.body, sa.tutor_uid, sa.duration,
-                                               sa.repeat_interval, sa.repeat_count, sa.appointment_type, sa.hourly_rate, sa.rate_override
+    if ($field == 'sae.appointment_event_id') {
+      $result = db_fetch_object(db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag,
+                                                 sa.title, sa.body, sa.tutor_uid, sa.duration,
+                                                 sa.repeat_interval, sa.repeat_count, sa.appointment_type,
+                                                 sa.hourly_rate, sa.rate_override
                                         FROM {sb_appointment_event} AS sae
                                           INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
                                         WHERE $field = %d", $id));
-    return $result;
+      return $result;
+    }
+    else if ($field == 'sae.appointment_id') {
+      $data = array();
+      $result = db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag,
+                                                 sa.title, sa.body, sa.tutor_uid, sa.duration,
+                                                 sa.repeat_interval, sa.repeat_count, sa.appointment_type,
+                                                 sa.hourly_rate, sa.rate_override
+                                        FROM {sb_appointment_event} AS sae
+                                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                                        WHERE $field = %d" . $date_where_clause,
+                $id, $form_date);
+      while ($row = db_fetch_object($result)) {
+        $data[] = $row;
+      }
+      return $data;
+    }
+    else {
+      return "";
+    }
   } else {
     return "";
   }
