@@ -1,0 +1,1 @@
+<? print $appointment_title; ?> <? print $time_string; ?>

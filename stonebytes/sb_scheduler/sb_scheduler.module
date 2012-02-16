@@ -1,0 +1,1812 @@
+<?php
+
+define ('DATE_FORMAT_ETO_LONG', 'l, F jS, Y');
+define ('DATE_FORMAT_ETO_LONG_NO_YEAR', 'l, F jS');
+define ('DATE_FORMAT_ETO_ABBREVIATED', 'n/j/y');
+define ('TIME_FORMAT_ETO_STANDARD', 'g:ia T');
+define ('TUTOR_SESSION', 1);
+define ('GROUP_SESSION', 2);
+define ('PERSONAL_SESSION', 3);
+define ('SCHEDULE_AVAILABILITY', 1);
+define ('SCHEDULE_VACATION', 2);
+
+function sb_tutor_schedule_type ($arg = "") {
+  $types = array ('1' => 'Available Time',
+		  '2' => 'Vacation',
+		  );
+  if (is_numeric($arg)) {
+    return $types[$arg];
+  } else if ($arg) {
+    return array('0' => $arg) + $types;
+  } else {
+    return $types;
+  }
+}
+
+/**
+ * Implementation of hook_access()
+ */
+function sb_scheduler_access($op, $node, $account) {
+  $is_author = $account->uid == $node->uid;
+  switch ($node->$type) {
+    /* Schedules */
+  case 'sb_schedule':
+    switch ($op) {
+    case 'create':
+      return user_access('create sb schedule', $account);
+    case 'update':
+      return user_access('edit own sb schedule', $account) && $is_author || user_access('edit any sb schedule', $account);
+    case 'delete':
+      return user_access('delete own sb schedule', $account) && $is_author || user_access('delete any sb schedule', $account);
+    }
+    /* Appointments */
+  case 'sb_appointment':
+    switch ($op) {
+    case 'create':
+      return user_access('create appointments', $account);
+    case 'update':
+      return user_access('edit own appointments', $account) && $is_author || user_access('edit any appointments', $account);
+    case 'delete':
+      return user_access('delete own appointments', $account) && $is_author || user_access('delete any appointments', $account);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_perm()
+ */
+function sb_scheduler_perm() {
+  return array(
+               'create schedule',
+
+	       'view others schedule',
+	       'edit others schedule',
+
+               'create appointments',
+
+	       'view all appointments',
+
+               );
+}
+
+/**
+ * Implementation of hook_node_info()
+ *
+ * All the node types we provide
+ */
+
+function sb_scheduler_node_info() {
+  return array(
+	       'sb_service' => array
+	       (
+		'name' => t('Tutoring Service'),
+		'module' => 'sb_service',
+		'description' => t('A tutoring service'),
+		'has_title' => TRUE,
+		'title_label' => t('Title'),
+		'has_body' => TRUE,
+		'body_label' => t('Description'),
+		'locked' => TRUE,
+		),
+               );
+}
+
+
+/**
+ * Implementation of hook_menu()
+ */
+
+function sb_scheduler_menu() {
+  /**
+   * Schedules
+   */
+
+  // only tutors can access their own schedule directly
+  $items['user/schedule'] = array (
+				   'title' => 'Add an appointment',
+				   'page callback' => 'user_schedule_display',
+				   'type' => MENU_NORMAL_ITEM,
+				   'file' => 'schedule.pages.inc',
+				   'access arguments' => array('create schedule'),
+				   );
+
+  $items['users/%/schedule'] = array (
+				      'title arguments' => array(1),
+				      'page callback' => 'user_schedule_display',
+				      'page arguments' => array(1),
+				      'type' => MENU_CALLBACK,
+				      'file' => 'schedule.pages.inc',
+				      'access arguments' => array('access content'),
+				      );
+  $items['user/calendar'] = array (
+				   'title' => 'My Calendar',
+				   'page callback' => 'user_calendar_display',
+				   'type' => MENU_NORMAL_ITEM,
+				   'file' => 'schedule.pages.inc',
+				   'menu_name' => 'tutor-student-links',
+				   'access arguments' => array('create appointments'),
+				   );
+
+  // only tutors can add schedule items
+  $items['user/calendar/add'] = array (
+				       'page callback' => 'sb_edit_schedule_block',
+				       'type' => MENU_CALLBACK,
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
+
+  $items['user/calendar/add/vacation'] = array (
+				       'page callback' => 'sb_add_vacation',
+				       'type' => MENU_CALLBACK,
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
+  $items['user/calendar/%/edit'] = array (
+				       'page callback' => 'sb_edit_schedule_block',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array("", 2),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
+  $items['user/calendar/%'] = array (
+				       'page callback' => 'sb_view_schedule_block',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array("", 2),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('access content'),
+				       );
+  $items['user/calendar/%/cancel'] = array (
+				       'page callback' => 'sb_schedule_action',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array("", 2, 3),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('access content'),
+				       );
+  $items['user/calendar/%/reinstate'] = array (
+				       'page callback' => 'sb_schedule_action',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array("", 2, 3),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('access content'),
+				       );
+  // the permissions here get checked in the subroutine to make sure you can view others' schedules
+  $items['users/%/calendar'] = array (
+				      'page callback' => 'user_calendar_display',
+				      'page arguments' => array(1),
+				      'type' => MENU_CALLBACK,
+				      'file' => 'schedule.pages.inc',
+				      'access arguments' => array('access content'),
+				      );
+  $items['users/%/calendar/add'] = array (
+				       'page callback' => 'sb_edit_schedule_block',
+				       'page arguments' => array(1),
+				       'type' => MENU_CALLBACK,
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
+  $items['users/%/calendar/add/vacation'] = array (
+				       'page callback' => 'sb_add_vacation',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array(1),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
+  $items['users/%/calendar/%'] = array (
+				       'page callback' => 'sb_view_schedule_block',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array(1, 3),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('access content'),
+				       );
+  $items['users/%/calendar/%/edit'] = array (
+				       'page callback' => 'sb_edit_schedule_block',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array(1, 3),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
+  $items['users/%/calendar/%/cancel'] = array (
+				       'page callback' => 'sb_schedule_action',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array(1, 3, 4),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('access content'),
+				       );
+  $items['users/%/calendar/%/reinstate'] = array (
+				       'page callback' => 'sb_schedule_action',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array(1, 3, 4),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('access content'),
+				       );
+
+
+  /**
+   * Appointments
+   */
+  $items['users/%/schedule/appointment/%'] = array (
+				      'title arguments' => array(1, 4),
+				      'page callback' => 'user_schedule_appointment_display',
+				      'page arguments' => array(1, 4),
+				      'type' => MENU_CALLBACK,
+				      'file' => 'schedule.pages.inc',
+				      'access arguments' => array('access content'),
+				      );
+  $items['appointments/%'] = array (
+					 'title' => 'View Appointment',
+					 'page callback' => 'sb_appointment_view',
+					 'page arguments' => array(1),
+					 'type' => MENU_CALLBACK,
+					 'file' => 'schedule.pages.inc',
+					 'access arguments' => array('access content'),
+					 );
+
+  $items['appointments/%/edit'] = array (
+					 'title' => 'Edit Appointment',
+					 'page callback' => 'user_schedule_appointment_edit',
+					 'page arguments' => array(1),
+					 'type' => MENU_CALLBACK,
+					 'file' => 'schedule.pages.inc',
+					 'access arguments' => array('access content'),
+					 );
+  $items['appointments/%/cancel'] = array (
+					 'title' => 'Cancel Appointment',
+					 'page callback' => 'user_schedule_appointment_action',
+					 'page arguments' => array(1, 2),
+					 'type' => MENU_CALLBACK,
+					 'file' => 'schedule.pages.inc',
+					 'access arguments' => array('access content'),
+					 );
+  $items['appointments/%/reinstate'] = array (
+					 'title' => 'Reinstate Appointment',
+					 'page callback' => 'user_schedule_appointment_action',
+					 'page arguments' => array(1, 2),
+					 'type' => MENU_CALLBACK,
+					 'file' => 'schedule.pages.inc',
+					 'access arguments' => array('access content'),
+					 );
+
+  // see eto_admin.module for the session-log stuff (e.g. appointments/%/log)
+
+  /**
+   * Callbacks
+   */
+
+
+  $items['callback/schedule'] = array (
+					 'title' => 'Schedule',
+					 'page callback' => 'callback_user_schedule_fetch',
+					 'file' => 'schedule.pages.inc',
+					 'access arguments' => array('access content'),
+					 'type' => MENU_CALLBACK,
+					 );
+  $items['callback/calendar'] = array (
+					 'title' => 'Calendar',
+					 'page callback' => 'callback_user_calendar_fetch',
+					 'file' => 'schedule.pages.inc',
+					 'access arguments' => array('access content'),
+					 'type' => MENU_CALLBACK,
+					 );
+  $items['eto/students/autocomplete'] = array (
+					       'page callback' => 'eto_students_autocomplete',
+					       'access arguments' => array('access content'),
+					       'type' => MENU_CALLBACK,
+					       );
+
+
+  return $items;
+}
+
+
+/*
+ * callbacks
+ */
+
+/*
+function user_schedule_callback($name) {
+  $user = eto_user_load(array('name' => $name));
+  if ($user) {
+    return "Schedule for " . check_plain($user->name);
+  } else {
+    return "";
+  }
+}
+
+function user_schedule_appointment_callback($name, $arg) {
+  $args = _schedule_decode_time_args($arg);
+
+  if ($args['target_date_user']) {
+    $title = "Schedule session with " . $name . " on " . date_format($args['target_date_user'], 'M jS, Y') . " at " . date_format($args['target_date_user'], 'g:ia');
+  }
+  return $title;
+
+}
+*/
+
+function eto_students_autocomplete ($string = '') {
+  $matches = array();
+  if ($string) {
+    $result = db_query_range("SELECT u.name FROM {users} AS u
+                                 INNER JOIN users_roles AS ur ON ur.uid = u.uid
+                              WHERE
+                                 LOWER(u.name) LIKE LOWER('%s%%')
+                                 AND ur.rid = 5",
+			     $string, 0, 10);
+    while ($user = db_fetch_object($result)) {
+      $matches[$user->name] = check_plain($user->name);
+    }
+  }
+
+  drupal_json($matches);
+}
+
+
+/*****************************************************************************
+ *****************************************************************************
+ **
+ ** Helper functions
+ **
+ *****************************************************************************
+ *****************************************************************************/
+
+// "quick format" for dates and times; helper for sb_get_hourly_rate above
+function _qf_date ($date) { return date_format($date, "Ymd"); }
+function _qf_time ($date) { return date_format($date, "His"); }
+
+
+function _schedule_decode_time_args($arg) {
+  $arg = sb_decode($arg);
+  $arg_array = explode("/", $arg);
+
+  $output = array();
+  $output['schedule_id'] = $arg_array[0];
+  $output['schedule_event_id'] = $arg_array[1];
+  $output['interval_count'] = $arg_array[2];
+
+  $block = sb_schedule_event_load(array('schedule_event_id' => $output['schedule_event_id']));
+
+  if ($block) {
+    $start = $block->start_datetime_utc;
+    $start = date_make_date($start, "UTC");
+    $output['start_date_utc'] = clone $start;
+
+    $interval = new DateInterval("PT" . 15 * $output['interval_count'] . "M");
+    $date = date_add($start, $interval);
+    $output['target_date_utc'] = clone $date;
+
+    date_timezone_set($date, timezone_open(user_tz()));
+    $output['target_date_user'] = $date;
+  }
+
+  return $output;
+}
+
+
+ function isa_participant($id, $uid) {
+   $result = db_result(db_query("SELECT COUNT(sa.appointment_id) FROM sb_appointment AS sa
+                                   INNER JOIN sb_appointment_participants AS sap ON sa.appointment_id = sap.appointment_id
+                                 WHERE (sa.tutor_uid = %d OR sap.participant_uid = %d)
+                                   AND sa.appointment_id = %d",
+				$uid, $uid, $id));
+   return $result;
+ }
+
+
+function format_participant_array($participants) {
+  $rows = array();
+  foreach ($participants as $p) {
+    $rows[] = l($p, "users/" . $p, array('attributes' => array('target' => '_blank')));
+  }
+  return $rows;
+}
+
+function sb_check_student_availability($name, $start, $duration, $appointment_id) {
+  $user = eto_user_load(array('name' => $name));
+  if ($user && $start && $duration) {
+    $start = date_make_date($start, "UTC");
+    $interval = new DateInterval("PT" . $duration . "M");
+    $start_date = date_format($start, DATE_FORMAT_DATETIME);
+    $end = date_add($start, $interval);
+    $end_date = date_format($end, DATE_FORMAT_DATETIME);
+
+    if ($start_date && $end_date) {
+      $result = db_query("SELECT COUNT(sae.appointment_event_id) FROM sb_appointment_event AS sae
+                             INNER JOIN sb_appointment_participants AS sap ON sap.appointment_id = sae.appointment_id
+                             INNER JOIN sb_appointment AS sa ON sa.appointment_id = sae.appointment_id
+                          WHERE (    ( (sae.start_datetime_utc > '%s') AND (sae.start_datetime_utc < '%s') )
+                                  OR ( (sae.end_datetime_utc > '%s') AND (sae.end_datetime_utc < '%s') ) )
+                             AND sap.participant_uid = %d
+                             AND sa.status_flag = 1
+                             AND sae.status_flag = 1
+                             AND sae.appointment_id != %d",
+			 $start_date, $end_date, $start_date, $end_date, $user->uid, $appointment_id);
+      return db_result($result);
+    }
+  }
+}
+
+function _sb_format_user($uid) {
+  $user = eto_user_load($uid);
+  if ($user) {
+    return $user->name;
+  } else {
+    return "";
+  }
+}
+
+function user_tz($user = "") {
+  if ($user && (! is_object($user))) {
+    if (is_int($user)) {
+      $user = eto_user_load($user);
+    } else {
+      $user = eto_user_load(array('name' => $user));
+    }
+  }
+  if (!$user) {
+    global $user;
+  }
+
+  if (variable_get('configurable_timezones', 1) && $user->uid && strlen($user->timezone)) {
+    return $user->timezone_name;
+  } else {
+    return variable_get('date_default_timezone_name', 0);
+  }
+}
+
+function date_extract($iso, $part) {
+  $iso = check_plain($iso);
+  $a = explode(' ', $iso);
+  if ($part == "date") {
+    return $a[0];
+  } else {
+    return $a[1];
+  }
+}
+
+function sb_rate_validate($rate) {
+  // if we have a dollar sign, remove it
+  $rate = str_replace('$', '', $rate);
+  // remove a decimal point
+  // if we don't have a decimal point, add two zeros at the end.  if we do, remove it
+  $pos = strpos($rate, '.');
+  if ($pos === false) {
+    $rate .= "00";
+  } else {
+    if ( strlen($rate) == ($pos + 2) ) { // we have a xx.x number
+      $rate .= "0";
+    } else if (strlen($rate) > ($pos + 3)) { // too many decimals
+      return "asdf";
+    }
+    $rate = str_replace('.', '', $rate);
+  }
+  // return it
+  return $rate;
+}
+
+/**
+ * Implementation of hook_form_alter
+ *
+ * Hide most dropdowns on the node forms on the whole site
+ */
+
+function sb_scheduler_form_alter(&$form, &$form_state, $form_id) {
+
+  if (! user_access('view hidden node fields') ) {
+    // Revision information
+    $form['revision_information']['#attributes'] = array('class' => 'hideme');
+    // Publishing options
+    $form['options']['#attributes'] = array('class' => 'hideme');
+    // XML sitemap
+    $form['xmlsitemap']['#attributes'] = array('class' => 'hideme');
+    // Printer, e-mail and PDF versions
+    $form['print']['#attributes'] = array('class' => 'hideme');
+    // URL path settings
+    $form['path']['#attributes'] = array('class' => 'hideme');
+    // Menu settings
+    $form['menu']['#attributes'] = array('class' => 'hideme');
+    // Comment settings
+    $form['comment_settings']['#attributes'] = array ('class' => 'hideme');
+  }
+
+  // change the "Authoring information" permission.
+  $form['author']['#access'] = user_access('change authoring information');
+  $form['author']['#description'] = '<div class="messages warning">' . t('Change this information with discretion; it will have many ramifications elsewhere on this site.') .'</div>';
+}
+
+/******************************************************************************************
+ ******************************************************************************************
+ *
+ * Themes
+ *
+ ******************************************************************************************
+ ******************************************************************************************/
+
+/**
+ * Implementation of hook_theme()
+ */
+
+function sb_scheduler_theme() {
+  $themes = array();
+
+  $themes['basic_field'] = array('arguments' => array('title' => NULL,
+						      'content' => NULL,
+						      'class' => NULL),
+				 'template' => 'basic-field');
+
+  $themes['meeting_participant'] = array ('arguments' => array ('name' => NULL,
+								'skype' => NULL));
+
+  $themes['meeting_participants'] = array ('arguments' => array ('tutor' => NULL,
+								 'students' => NULL),
+					   'template' => 'meeting-participants');
+
+  $themes['meeting_notes'] = array ('arguments' => array ('notes' => NULL,
+							  'title' => NULL),
+				    'template' => 'meeting-notes');
+
+  $themes['tutor_session_time'] = array ('arguments' => array ('start_datetime_utc' => NULL,
+							       'end_datetime_utc' => NULL,
+							       'event' => NULL),
+					 'template' => 'tutor-session-time');
+
+  $themes['cancellations_summary'] = array ('arguments' => array('event' => NULL));
+
+  $themes['tutor_session_view_all'] = array ('arguments' => array('appointment' => NULL,
+								  'current_event_id' => NULL));
+
+  $themes['session_event_item'] = array ('arguments' => array('event' => NULL,
+							      'date' => NULL,
+							      'now' => NULL,
+							      'link' => NULL));
+
+  $themes['appointment_event_item'] = array ('arguments' => array('appointment' => NULL))
+;
+  $themes['session_status'] = array ('arguments' => array('event' => NULL,
+							  'now' => NULL));
+
+  $themes['cancel_this'] = array ('arguments' => array('event' => NULL));
+
+  $themes['cancellation_log_item'] = array ('arguments' => array('cancellation' => NULL));
+
+  $themes['child_event_list'] = array ('arguments' => array ('parent_event' => NULL,
+							     'target_user' => NULL,
+							     'action' => NULL));
+  $themes['vyew_room'] = array ('arguments' => array ('name' => NULL,
+						      'appointment_event_id' => NULL),
+				'template' => 'vyew-room');
+
+  $themes['user_vyew_room'] = array ('arguments' => array ('name' => NULL,
+						      'appointment_event_id' => NULL),
+				'template' => 'vyew-room');
+
+  $themes['vyew_room_small'] = array ('arguments' => array ('appointment' => NULL,
+							    'string' => NULL));
+
+
+  /**
+   ** front page stuff
+   **
+   **/
+
+  $themes['calendar_today'] = array ('arguments' => array ('user' => NULL));
+
+  $themes['upcoming_appointment_front_page'] = array ('template' => 'upcoming-appointment-front-page');
+
+  $themes['upcoming_appointment_front_page_instance'] = array ('arguments' => array('appointment' => NULL),
+							       'template' => 'upcoming-appointment-front-page-instance');
+
+  return $themes;
+}
+
+function template_preprocess_tutor_session_time(&$vars) {
+  $event = $vars['event'];
+
+  $start_date = date_make_date($vars['start_datetime_utc'], "UTC");
+  date_timezone_set($start_date, timezone_open(user_tz()));
+  $end_date = date_make_date($vars['end_datetime_utc'], "UTC");
+  date_timezone_set($end_date, timezone_open(user_tz()));
+  $now = date_make_date(time(), "UTC");
+  date_timezone_set($now, timezone_open(user_tz()));
+
+  $vars['date'] = date_format($start_date, DATE_FORMAT_ETO_LONG) . ' at ' . date_format($start_date, TIME_FORMAT_ETO_STANDARD);
+  $backward_interval = format_interval( time() - date_format($end_date, "U"), 1 ) . " ago";
+  $backward_interval_start = format_interval( time() - date_format($start_date, "U"), 1 ) . " ago";
+  $forward_interval = "in " . format_interval( date_format($start_date, "U") - time(), 1 );
+
+  $session_day = date_format($start_date, 'm/d/Y');
+  $today = date_format($now, 'm/d/Y');
+
+  if ($session_day == $today) {
+    // either upcoming or in-progress
+    if ($now >= $start_date) {
+      // we're either late, or this is old
+      if ($now < $end_date) {
+	$vars['class'] = 'late';
+	$vars['interval'] = "started " . $backward_interval_start;
+	$vars['description'] .= "This tutoring session is happening right now.";
+      } else {
+	$vars['class'] = 'old';
+	$vars['interval'] = "ended " . $backward_interval;
+	$vars['description'] .= "This tutoring session already ended.";
+      }
+    } else {
+      $vars['class'] = 'today';
+      $vars['interval'] = $forward_interval;
+      $vars['description'] .= "This tutoring session is happening today.";
+    }
+  } else {
+    if ($start_date < $now) {
+      $vars['class'] = "old";
+      $vars['interval'] = $backward_interval;
+      $vars['description'] = "This tutoring session already happened.";
+    } else {
+      $vars['class'] = "upcoming";
+      $vars['interval'] = $forward_interval;
+      $vars['description'] = "This tutoring session has not happened yet. " . theme_cancel_this($event);
+    }
+  }
+
+  if (is_cancelled($event)) {
+    $vars['description'] = "<span class='cancel-this'>This session has been cancelled.</span>";
+    // if only the event was cancelled...
+    if ( only_event_is_cancelled($event)
+	 && ((user_access('view all appointments')
+	      || ($appointment->tutor_uid == $user->uid)))) {
+      $vars['description'] .= "<br>Canceled in error? "
+	. l('Reinstate this appointment.',
+	    appointment_url("",  $event->appointment_id, $event->appointment_event_id, "reinstate"));
+    }
+    $vars['cancellations'] = theme('cancellations_summary', $event);
+  } else if ($event->appointment_type == GROUP_SESSION) {
+    // show cancellations if this is a group session and not 100% cancelled
+    $vars['cancellations'] = theme('cancellations_summary', $event);
+  }
+
+}
+
+function theme_cancellations_summary($event) {
+  $output = "\n";
+
+  $cancellations = sb_cancel_log_event_load($event->appointment_event_id);
+  if (count($cancellations) > 0) {
+    $output = "<ul>";
+    foreach ($cancellations as $c) {
+      $output .= theme('cancellation_log_item', $c);
+    }
+    $output .= "</ul>\n";
+  }
+  return $output;
+}
+
+function template_preprocess_vyew_room(&$vars) {
+  $vars['vyew_room_link'] = l("Enter your classroom",
+			      "users/" . $vars['name'] . "/room" . ($vars['appointment_event_id'] ? "/" . $vars['appointment_event_id'] : ""),
+			      array('attributes' => array('target' => '_blank')));
+}
+
+function template_preprocess_user_vyew_room(&$vars) {
+  global $user;
+  $target_user = eto_user_load($vars['name']);
+  if ($user->uid == $target_user->uid) {
+    $possessive = "your";
+  } else {
+    $possessive = $target_user->name . "'s";
+  }
+  $vars['vyew_room_link'] = l("Enter $possessive classroom",
+			      "users/" . $vars['name'] . "/room" . ($vars['appointment_event_id'] ? "/" . $vars['appointment_event_id'] : ""),
+			      array('attributes' => array('target' => '_blank')));
+}
+
+function theme_tutor_session_view_all($appointment, $current_event_id = 0) {
+  drupal_add_js('misc/collapse.js');
+
+  $now = date_make_date(time(), "UTC");
+  date_timezone_set($now, timezone_open(user_tz()));
+
+  $events = sb_appointment_load_events($appointment->appointment_id);
+  $output .= "<fieldset class='collapsible collapsed' id='list-sessions'>\n";
+  $output .= "<legend><a href='#'>" . t("View all sessions for this appointment") . "</a></legend>\n";
+  $output .= "<div class='fieldset-wrapper'>\n";
+  $output .= "<ul class='session-event-list'>\n";
+  foreach ($events as $event) {
+    if ($event->appointment_event_id == $current_event_id) {
+      $output .= "<li>" . theme('session_event_item', $event, $now, 0) . "</li>";
+    } else {
+      $output .= "<li>" . theme('session_event_item', $event, $now) . "</li>";
+    }
+  }
+  $output .= "</ul>\n";
+  $output .= "</div>\n";
+  $output .= "</fieldset>\n";
+
+  return $output;
+}
+
+function theme_session_event_item($event, $now, $link = 1) {
+  $date = date_make_date($event->start_datetime_utc, 'UTC');
+  date_timezone_set($date, timezone_open(user_tz()));
+
+  if ($date < $now) {
+    $class = "class='past'";
+  }
+
+  $date_string = date_format($date, 'M d, Y');
+
+  if ($link) {
+    $date_string = l($date_string, appointment_url("", $event->appointment_id, $event->appointment_event_id));
+  } else {
+    $date_string = "<strong>*" . $date_string . "*</strong>";
+  }
+
+  $cancellations = count(sb_cancel_log_event_load($event->appointment_event_id));
+
+  return "<span $class>" . $date_string . " " . theme('session_status', $event, $date, $now) . "</span>\n";
+}
+
+function theme_appointment_event_item($event) {
+  $date = date_make_date($event->start_datetime_utc, 'UTC');
+  date_timezone_set($date, timezone_open(user_tz()));
+
+  $participants = sb_appointment_participants_load($event->appointment_id, "names");
+  $p = format_participant_array($participants);
+
+  $date_string = date_format($date, 'M d, Y');
+  $time_string = date_format($date, TIME_FORMAT_ETO_STANDARD);
+
+  $output = "<em>'" . l($event->title, appointment_url("", $event->appointment_id, $event->appointment_event_id)) . "'</em> on "
+    . $date_string . " at " . $time_string
+    . " with " . join (", ", $p);
+
+  return $output;
+
+  if ($link) {
+    $date_string = l($date_string, appointment_url("", $event->appointment_id, $event->appointment_event_id));
+  } else {
+    $date_string = "<strong>*" . $date_string . "*</strong>";
+  }
+
+  $cancellations = count(sb_cancel_log_event_load($event->appointment_event_id));
+
+  return "<span $class>" . $date_string . " " . theme('session_status', $event, $date, $now) . "</span>\n";
+}
+
+function theme_session_status($event, $date, $now) {
+  $output = "";
+  if (is_cancelled($event)) {
+    $output = "<span class='cancelled'>Cancelled</span>";
+  } else if ($date > $now) {
+    $output = "<span class='upcoming'>Upcoming</span> " . theme_cancel_this($event) . " " . theme('cancellations_summary', $event);
+  }
+  return $output;
+}
+
+function is_cancelled($event) {
+  if ( (isset($event->status_flag) && ($event->status_flag == 0))
+       || (isset($event->appointment_status_flag) && ($event->appointment_status_flag == 0) ) ) {
+    return 1;
+  }
+}
+
+function only_event_is_cancelled($event) {
+  if ( (isset($event->status_flag) && ($event->status_flag == 0))
+       && (isset($event->appointment_status_flag) && ($event->appointment_status_flag == 1) ) ) {
+    return 1;
+  }
+}
+
+function only_appointment_is_cancelled($event) {
+  if ( (isset($event->status_flag) && ($event->status_flag == 1))
+       && (isset($event->appointment_status_flag) && ($event->appointment_status_flag == 0) ) ) {
+    return 1;
+  }
+}
+
+function sb_cancel_log_event_load($id) {
+  $result = db_query('SELECT * FROM {sb_cancel_log} WHERE appointment_event_id = %d',
+		     $id);
+  $items = array();
+  while ($obj = db_fetch_object($result)) {
+    $items[] = $obj;
+  }
+  return $items;
+}
+
+function theme_cancel_this($event) {
+  return "<span class='cancel-this'>"
+    . l("[cancel this]",
+      appointment_url("", $event->appointment_id, $event->appointment_event_id, "cancel"))
+    . "</span>";
+}
+
+function theme_cancellation_log_item($obj) {
+  $user = eto_user_load($obj->uid);
+  $date = date_make_date($obj->datetime_utc, "UTC");
+  $date = date_timezone_set($date, timezone_open(user_tz()));
+
+  return "<li>"
+    . sb_user_link($user)
+    . " cancelled on "
+    . date_format($date, DATE_FORMAT_ETO_LONG_NO_YEAR)
+    . " at "
+    . date_format($date, TIME_FORMAT_ETO_STANDARD)
+    . ($obj->body ? " with the reason: "
+       . "<em>" . check_plain($obj->body) . "</em>"
+       : "");
+}
+
+function theme_child_event_list ($event, $target_user, $action = "") {
+  $events = sb_schedule_event_load(array('schedule_id' => $event->schedule_id));
+
+  if ($events) {
+    $now = date_make_date(time(), "UTC");
+
+    $output .= "<ul>";
+    foreach ($events as $e) {
+      $output .= "<li>";
+      $date = date_make_date($e->start_datetime_utc, "UTC");
+      $date = date_timezone_set($date, timezone_open(user_tz($target_user)));
+      $event_string = l(date_format($date, DATE_FORMAT_ETO_LONG),
+		   schedule_url(sb_user_base($target_user) . "/",
+				$e->schedule_id,
+				$e->schedule_event_id,
+				$action));
+      if ($e->status_flag == 0) {
+        $output .= "<strike>$event_string</strike>";
+      }
+      else {
+        $output .= $event_string;
+      }
+      $output .= ' ' . theme('session_status', $e, $date, $now);
+      $output .= "</li>";
+    }
+    $output .= "</ul>";
+  }
+
+  return $output;
+}
+
+
+function sb_user_link ($user) {
+  return l(check_plain($user->name), drupal_get_path_alias('user/' . check_plain($user->name)));
+}
+
+function theme_meeting_participant($user, $skype) {
+  $name = ($user->eto_profile->first_name ? $user->eto_profile->first_name . " " . $user->eto_profile->last_name : $user->name);
+  $output .= l($name, 'users/' . $user->name, array('attributes' => array('target' => '_blank')));
+  if ($skype) {
+    $skype = skype_settings_load($user);
+    if (strlen($skype) > 0) {
+      $output .= " " . '<a href="skype:' . $skype . '?call"><img src="http://download.skype.com/share/skypebuttons/buttons/call_blue_transparent_70x23.png" style="border: none;" width="70" height="23" alt="Skype Me!" /></a>';
+    }
+  }
+  return $output;
+}
+
+function skype_me($user) {
+  $name = ($user->eto_profile->first_name ? $user->eto_profile->first_name . " " . $user->eto_profile->last_name : $user->name);
+  $skype = skype_settings_load($user);
+  if (strlen($skype) > 0) {
+    $output .= " " . '<a href="skype:' . $skype . '?call"><img src="http://download.skype.com/share/skypebuttons/buttons/call_blue_transparent_70x23.png" style="border: none;" width="70" height="23" alt="Skype Me!" /></a>';
+    $output .= l($name, 'users/' . $user->name, array('attributes' => array('target' => '_blank')));
+  }
+  return $output;
+}
+
+
+function skype_settings_load($user) {
+   profile_load_profile($user);
+   $skype = $user->profile_skype_account;
+   return $skype;
+}
+
+function theme_calendar_today ($target_user = "") {
+  global $user;
+  if (!$target_user) {
+    $target_user = $user;
+  } else {
+    $target_user = eto_user_load(array('name' => $target_user));
+  }
+
+  // if the user can't schedule appointments or make their own schedule, they will have nothing to show
+  if ( (! user_access('create appointments', $target_user)) && (! user_access('create schedule', $target_user)) ) {
+    return "";
+  }
+
+  $output = "";
+
+  $output .= "<h2>Today for " . $target_user->name . "</h2>";
+
+  $now = date_make_date(time(), user_tz());
+  //  date_timezone_set($now, timezone_open('UTC'));
+  $now_day = date_format($now, "Y-m-d");
+  $day_start = $now_day . " 00:00:00";
+  $day_end = $now_day . " 23:59:59";
+
+  $day_start = date_make_date($day_start, user_tz($target_user));
+  date_timezone_set($day_start, timezone_open('UTC'));
+  $day_end = date_make_date($day_end, user_tz($target_user));
+  date_timezone_set($day_end, timezone_open('UTC'));
+
+  //fixme
+  // find out if we're on vacation or tutoring today, if we're a tutor
+  if (user_access('create schedule', $target_user)) {
+    $vacation = sb_schedule_uid_load($target_user->uid, TRUE, $day_start, $day_end, SCHEDULE_VACATION);
+    if ($vacation) {
+      $output .= "<strong>You are on vacation.</strong><br>\n";
+    }
+
+    $blocks = sb_schedule_uid_load($target_user->uid, TRUE, $day_start, $day_end, SCHEDULE_AVAILABILITY);
+    if ($blocks) {
+      $output .= "<strong>You tutor:</strong><br>";
+      $data = array();
+      foreach ($blocks as $block) {
+	$start = date_make_date($block->start_datetime_utc, 'UTC');
+	date_timezone_set($start, timezone_open(user_tz($target_user)));
+	$end = date_make_date($block->end_datetime_utc, 'UTC');
+	date_timezone_set($end, timezone_open(user_tz($target_user)));
+	$data[] = date_format($start, TIME_FORMAT_ETO_STANDARD) . " to " . date_format($end, TIME_FORMAT_ETO_STANDARD);
+      }
+      $output .= "<ul class='tutor-block'>";
+      $output .= "<li>" . join("</li><li>", $data) . "</li>";
+      $output .= "</ul>";
+    }
+    $now = date_make_date(time(), "UTC");
+    $date = date_format($now, DATE_FORMAT_DATETIME);
+    $appointments = sb_appointment_load_by_date($target_user->uid, $day_start, $day_end, SCHEDULE_AVAILABILITY, TRUE);
+    if ($appointments) {
+      $data = array();
+      foreach ($appointments as $a) {
+	$start = date_make_date($a->start_datetime_utc, "UTC");
+	date_timezone_set($start, timezone_open(user_tz($target_user)));
+	$time = date_format($start, TIME_FORMAT_ETO_STANDARD);
+	if ($start < $now) {
+	  $time = "<span class='strike'>$time</span>";
+	}
+	$data[] = $time;
+      }
+
+      $output .= "<strong>Appointments:</strong>";
+      $output .= "<ul class='tutor-block'>";
+      $output .= "<li>" . join("</li><li>", $data) . "</li>";
+      $output .= "</ul>";
+    }
+    if (!$blocks && !$appointments) {
+      $output .= "Nothing is scheduled.";
+    }
+  }
+
+  return $output;
+}
+
+function template_preprocess_upcoming_appointment_front_page (&$variables) {
+
+  $before = variable_get('upcoming-appointment-minutes-before', 60);
+  $after = variable_get('upcoming-appointment-minutes-after', 15);
+
+  $start = date_make_date(time() - ($after * 60), 'UTC', DATE_UNIX);
+  $end = date_make_date(time() + ($before * 60), 'UTC', DATE_UNIX);
+
+  global $user;
+  $appointments = sb_appointment_uid_load ($user->uid, $start, $end);
+  if ($appointments) {
+    foreach ($appointments as $appointment) {
+      $appointment = sb_appointment_load($appointment->appointment_id);
+      if ($appointment_type != PERSONAL_SESSION) {
+	$variables['content'] .= theme('upcoming_appointment_front_page_instance', $appointment);
+      }
+    }
+  }
+}
+
+function template_preprocess_upcoming_appointment_front_page_instance(&$variables) {
+  $appointment = $variables['appointment'];
+
+  $variables['url'] = appointment_url('', $appointment->appointment_id, $appointment->appointment_event_id);
+  $variables['appointment_title'] = l($appointment->title, $variables['url']);
+  $now = time();
+  $start = date_make_date($appointment->start_datetime_utc, 'UTC');
+  date_timezone_set($start, timezone_open(user_tz()));
+  $start = date_format($start, DATE_FORMAT_UNIX);
+
+  $delta = ($now - $start);
+
+  if ($delta > 0) {
+    $interval = format_interval($delta, 2);
+    $variables['time_string'] = "started " . $interval . " ago";
+  } else {
+    $interval = format_interval(($delta * -1), 2);
+    $variables['time_string'] = "begins in " . $interval;
+  }
+
+  $variables['vyew_link'] = theme('vyew_room_small', $appointment, "Enter the classroom now.");
+}
+
+function theme_vyew_room_small ($appointment, $string = "Enter the classroom now.") {
+  $appointment_full = sb_appointment_load($appointment->appointment_id);
+  if ($appointment_full->appointment_type == TUTOR_SESSION) {
+    $user = eto_user_load($appointment_full->student_uid_0);
+  } else {
+    $user = eto_user_load($appointment_full->tutor_uid);
+  }
+  return l($string,
+	   "users/" . $user->name . "/room/" . $appointment->appointment_event_id);
+}
+
+
+/******************************************************************************************
+ ******************************************************************************************
+ *
+ * Blocks
+ *
+ ******************************************************************************************
+ ******************************************************************************************/
+
+/*
+ * Implementation of hook_block
+ */
+function sb_scheduler_block ($op = 'list', $delta = '', $edit = array()) {
+  switch ($op)
+    {
+
+      /*********
+       *
+       * List of available blocks
+       *
+       *********/
+
+    case 'list':
+
+      $blocks['calendar-today']['info'] = "A user's schedule information for today";
+      $blocks['calendar-today']['cache'] = BLOCK_NO_CACHE;
+
+      $blocks['upcoming-appointment']['info'] = "A block that shows up when you have an upcoming appointment";
+      $blocks['upcoming-appointment']['cache'] = BLOCK_NO_CACHE;
+
+      $blocks['calendar-link']['info'] = "A block that links to the user's calendar";
+      $blocks['calendar-link']['cache'] = BLOCK_CACHE_PER_ROLE;
+
+      return $blocks;
+
+      break;
+
+      /*********
+       *
+       * Configure the blocks
+       *
+       *********/
+
+    case 'configure':
+
+      if ($delta == 'upcoming-appointment') {
+
+	$form['upcoming-appointment-minutes-before'] = array(
+							     '#type' => 'textfield',
+							     '#title' => 'Enter the number of minutes before an appointment starts that it should be visible',
+							     '#description' => 'e.g., if you enter 60, the block will be visible for an hour before the appointment starts.',
+							     '#default_value' => variable_get('upcoming-appointment-minutes-before', 60),
+							     );
+	$form['upcoming-appointment-minutes-after'] = array(
+							     '#type' => 'textfield',
+							     '#title' => 'Enter the number of minutes after an appointment starts that it should be visible',
+							     '#description' => 'e.g., if you enter 15, the block will be visible for 15 minutes after the appointment starts in case someone is late.',
+							     '#default_value' => variable_get('upcoming-appointment-minutes-after', 15),
+							     );
+
+      }
+
+      return $form;
+
+      break;
+
+      /*********
+       *
+       * Save the block configuration
+       *
+       *********/
+
+    case 'save':
+
+      if ($delta == 'upcoming-appointment') {
+	variable_set('upcoming-appointment-minutes-before', $edit['upcoming-appointment-minutes-before']);
+	variable_set('upcoming-appointment-minutes-after', $edit['upcoming-appointment-minutes-after']);
+      }
+
+      return;
+      break;
+
+      /*********
+       *
+       * Display blocks
+       *
+       *********/
+
+    case 'view':
+
+      if ($delta == "calendar-today") {
+	$block['content'] = theme('calendar_today');
+
+      } else if ($delta == 'upcoming-appointment') {
+	$block['content'] = theme('upcoming_appointment_front_page');
+
+      } else if ($delta == 'calendar-link') {
+
+	$block['content'] = create_our_menu();
+
+      }
+
+      return $block;
+      break;
+
+    }
+}
+
+
+/*
+ * it would be awesome to use drupal menus for this, but we can't:
+ * since "user" goes into primary-links, it doesn't let us put
+ * user/calendar into our own menu.
+ */
+function create_our_menu() {
+	$content = "<ul class='menu'>";
+	$content .= "<li><a href='user'><span class='link-span'>My account</span></a></li>";
+	$content .= "<li><a href='user/calendar'><span class='link-span'>My calendar</span></a></li>";
+	$content .= "</ul>\n";
+	return $content;
+}
+
+
+
+/******************************************************************************************
+ ******************************************************************************************
+ *
+ * Load functions
+ *
+ ******************************************************************************************
+ ******************************************************************************************/
+
+/**
+ * Load an sb_schedule object
+ */
+
+function sb_schedule_load($id) {
+  $fields = db_fetch_object(db_query("SELECT * FROM {sb_schedule} WHERE schedule_id = %d", $id));
+  // need to convert the date/time to various timezones
+  $start = date_make_date($fields->start_datetime_utc, "UTC");
+  $end = date_make_date($fields->end_datetime_utc, "UTC");
+
+  // first convert it to the visitor's timezone
+  $tz_name = user_tz();
+  $start = date_timezone_set($start, timezone_open($tz_name));
+  $end = date_timezone_set($end, timezone_open($tz_name));
+  $fields->start_datetime_user = date_format($start, DATE_FORMAT_DATETIME);
+  $fields->end_datetime_user = date_format($end, DATE_FORMAT_DATETIME);
+  $fields->tz_user = date_format($start, "T");
+
+  // then to the owner's timezone
+  $owner = eto_user_load(array('uid' => $node->uid));
+  $tz_name = user_tz($owner);
+  $start = date_timezone_set($start, timezone_open($tz_name));
+  $end = date_timezone_set($end, timezone_open($tz_name));
+  $fields->start_datetime_owner = date_format($start, DATE_FORMAT_DATETIME);
+  $fields->end_datetime_owner = date_format($end, DATE_FORMAT_DATETIME);
+  $fields->tz_owner = date_format($start, "T");
+
+  return $fields;
+}
+
+function sb_schedule_event_load ($args) {
+  if ($args['schedule_event_id']) {
+    $field = 'sse.schedule_event_id';
+    $id = $args['schedule_event_id'];
+  } else if ($args['schedule_id']) {
+    $field = 'sse.schedule_id';
+    $id = $args['schedule_id'];
+  }
+
+  if ($args['from_date']) {
+    // return a list of all events in a schedule after a given date
+    $date_where_clause = ' AND sse.start_datetime_utc >= \'%s\'';
+    $from_date = $args['from_date'];
+  }
+  else {
+    $date_where_clause = '';
+    $from_date = '';
+  }
+
+  if ($id > 0) {
+    if ($field == "sse.schedule_event_id") {
+      $data = db_fetch_object(db_query("SELECT sse.*, ss.uid
+                                        FROM {sb_schedule_event} AS sse
+                                          INNER JOIN {sb_schedule} AS ss ON sse.schedule_id = ss.schedule_id
+                                        WHERE $field = %d", $id));
+    } else if ($field == "sse.schedule_id") {
+      $data = array();
+      $result = db_query("SELECT sse.*, ss.uid
+                          FROM {sb_schedule_event} AS sse
+                          INNER JOIN {sb_schedule} AS ss ON sse.schedule_id = ss.schedule_id
+                          WHERE $field = %d" . $date_where_clause,
+                $id, $from_date);
+      while ($row = db_fetch_object($result)) {
+	$data[] = $row;
+      }
+    }
+    return $data;
+  } else {
+    return "";
+  }
+}
+
+/*
+ * Find the block for a given uid that surrounds a given datetime (UTC)
+ */
+
+function sb_schedule_event_time_load ($uid, $date, $active = FALSE) {
+  if ($active) {
+    $clauses = ' AND ss.status_flag = 1 AND sse.status_flag = 1 ';
+  }
+  // note that this only returns active sessions
+  if ( ($uid > 0) && $date ) {
+    $result = db_fetch_object(db_query("SELECT sse.* FROM {sb_schedule_event} AS sse
+                                          INNER JOIN {sb_schedule} AS ss ON ss.schedule_id = sse.schedule_id
+                                        WHERE ss.uid = %d
+                                          AND sse.start_datetime_utc <= '%s' AND sse.end_datetime_utc >= '%s'
+                                          $clauses
+                                        LIMIT 1",
+				       $uid, $date, $date));
+
+    return $result;
+  } else {
+    return "";
+  }
+}
+
+
+function sb_schedule_uid_load ($uid, $active = FALSE, $start = "", $end = "", $type = SCHEDULE_AVAILABILITY) {
+  if ($active) {
+    $clauses = ' AND ss.status_flag = 1 AND sse.status_flag = 1 ';
+  }
+
+  // note that this only returns active sessions
+  if ($start && $end) {
+    $result = db_query("SELECT sse.*, ss.schedule_type, ss.uid
+                        FROM sb_schedule_event AS sse
+                           INNER JOIN sb_schedule AS ss ON ss.schedule_id = sse.schedule_id
+                        WHERE sse.start_datetime_utc BETWEEN '%s' AND '%s'
+                          AND ss.uid = %d
+                          AND ss.schedule_type = %d
+                          $clauses
+                        ORDER BY sse.start_datetime_utc ASC",
+		       date_format($start, DATE_FORMAT_DATETIME),
+		       date_format($end, DATE_FORMAT_DATETIME),
+		       $uid, $type);
+  } else {
+    $result = db_query("SELECT sse.* FROM sb_schedule_event AS sse
+                          INNER JOIN sb_schedule AS ss ON ss.schedule_id = sse.schedule_id
+                        WHERE ss.uid = %d
+                          AND ss.schedule_type = %d
+                          $clauses
+                        ORDER BY sse.start_datetime_utc ASC",
+		       $uid, $type);
+  }
+
+  $nodes = array();
+  while ($obj = db_fetch_object($result)) {
+    $nodes[] = $obj;
+  }
+  return $nodes;
+}
+
+function sb_appointment_load ($id) {
+  if ($id > 0) {
+    $result = db_fetch_object(db_query("SELECT * FROM {sb_appointment} WHERE appointment_id = %d", $id));
+    $participants = sb_appointment_participants_load($id);
+    // if we are a single-tutor session, store it in zero; otherwise store starting with 1
+    if ($result->appointment_type == TUTOR_SESSION) {
+      $u = eto_user_load($participants[0]);
+      $result->student_0 = $u->name;
+      $result->student_uid_0 = $u->uid;
+    } else {
+      for ($i = 1; $i <= count($participants); $i++) {
+	$u = eto_user_load($participants[$i-1]);
+	$result->{"student_" . $i} = $u->name;
+	$result->{"student_uid_" . $i} = $u->uid;
+      }
+    }
+    return $result;
+  } else {
+    return "";
+  }
+}
+
+function sb_appointment_participants_load($id, $names = "") {
+  if ($id > 0) {
+    $items = array();
+    if ($names) {
+      $result = db_query("SELECT u.name FROM {sb_appointment_participants} AS sap
+                            INNER JOIN users AS u ON sap.participant_uid = u.uid
+                          WHERE sap.appointment_id = %d
+                          ORDER BY u.name",
+			 $id);
+      while ($obj = db_fetch_object($result)) {
+	$items[] = $obj->name;
+      }
+      return $items;
+    } else {
+      $result = db_query("SELECT * FROM {sb_appointment_participants} WHERE appointment_id = %d ORDER BY participant_uid", $id);
+      while ($obj = db_fetch_object($result)) {
+	$items[] = $obj->participant_uid;
+      }
+    }
+    return $items;
+  } else {
+    return "";
+  }
+}
+
+function sb_appointment_participants_load_pretty($id) {
+  if ($id > 0) {
+    $items = array();
+    $result = db_query("SELECT u.name FROM {sb_appointment_participants} AS sap
+                            INNER JOIN users AS u ON sap.participant_uid = u.uid
+                          WHERE sap.appointment_id = %d
+                          ORDER BY u.name",
+		       $id);
+    while ($obj = db_fetch_object($result)) {
+      $u = eto_user_load($obj->name);
+      $items[] = theme('eto_user', $u, TRUE);
+    }
+    return $items;
+  } else {
+    return "";
+  }
+}
+
+function sb_appointment_load_events ($id) {
+  $rows = array();
+  if ($id > 0) {
+    $result = db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag, sa.title, sa.body, sa.tutor_uid, sa.duration,
+                               sa.repeat_interval, sa.repeat_count, sa.appointment_type
+                        FROM {sb_appointment_event} AS sae
+                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                        WHERE sae.appointment_id = %d
+                        ORDER BY sae.start_datetime_utc ASC", $id);
+    while ($row = db_fetch_object($result)) {
+      $rows[] = $row;
+    }
+  }
+  return $rows;
+}
+
+function sb_appointment_next_event_load($id, $date = "", $active = FALSE) {
+  if ($active) {
+    $clauses = ' AND sa.status_flag = 1 AND sae.status_flag = 1 ';
+  }
+  // this needs to be able to return canceled sessions
+  if ($id > 0) {
+    // use end instead of start so we can find in-progress sessions
+    $result = db_fetch_object(db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag, sa.title, sa.body, sa.tutor_uid, sa.duration,
+                                               sa.repeat_interval, sa.repeat_count, sa.appointment_type
+                                        FROM {sb_appointment_event} AS sae
+                                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                                        WHERE sae.end_datetime_utc > '%s'
+                                          AND sae.appointment_id = %d
+                                          $clauses
+                                        ORDER BY sae.start_datetime_utc ASC
+                                        LIMIT 1",
+				       $date, $id));
+  }
+  return $result;
+}
+
+
+
+function sb_appointment_load_by_time($uid, $date, $active = FALSE, $count = 1) {
+  if ($active) {
+    $clauses = ' AND sa.status_flag = 1 AND sae.status_flag = 1 ';
+  }
+
+  if (($uid > 0) && ($date > 0)) {
+    // use end instead of start so we can find in-progress sessions
+    $result = db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag, sa.title, sa.body, sa.tutor_uid, sa.duration,
+                                               sa.repeat_interval, sa.repeat_count, sa.appointment_type
+                                        FROM {sb_appointment_event} AS sae
+                                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                                          LEFT JOIN sb_appointment_participants AS sap ON sae.appointment_id = sap.appointment_id
+                                        WHERE ( (sae.end_datetime_utc > '%s') OR (sae.start_datetime_utc > '%s') )
+                                          AND ( (sa.tutor_uid = %d) OR (sap.participant_uid = %d) )
+                                          $clauses
+                                        ORDER BY sae.start_datetime_utc ASC
+                                        LIMIT %d",
+		       $date, $date, $uid, $uid, $count);
+    if ($count == 1) {
+      return db_fetch_object($result);
+    } else {
+      $data = array();
+      while ($obj = db_fetch_object($result)) {
+	$data[] = $obj;
+      }
+      return $data;
+    }
+  }
+  // else
+  return "";
+}
+
+function sb_appointment_load_by_date($uid, $start, $end, $type, $active = FALSE) {
+  if ($active) {
+    $clauses = ' AND sa.status_flag = 1 AND sae.status_flag = 1 ';
+  }
+
+  if ($uid > 0) {
+    // use end instead of start so we can find in-progress sessions
+    $result = db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag, sa.title, sa.body, sa.tutor_uid, sa.duration,
+                                               sa.repeat_interval, sa.repeat_count, sa.appointment_type
+                                        FROM {sb_appointment_event} AS sae
+                                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                                          LEFT JOIN sb_appointment_participants AS sap ON sae.appointment_id = sap.appointment_id
+                                        WHERE sae.start_datetime_utc BETWEEN '%s' AND '%s'
+                                          AND ( (sa.tutor_uid = %d) OR (sap.participant_uid = %d) )
+                                          AND sa.appointment_type = '%s'
+                                          $clauses
+                                        ORDER BY sae.start_datetime_utc ASC",
+		       date_format($start, DATE_FORMAT_DATETIME),
+                       date_format($end, DATE_FORMAT_DATETIME),
+		       $uid, $uid, $type);
+    if ($count == 1) {
+      return db_fetch_object($result);
+    } else {
+      $data = array();
+      while ($obj = db_fetch_object($result)) {
+	$data[] = $obj;
+      }
+      return $data;
+    }
+  }
+  // else
+  return "";
+}
+
+function sb_appointment_next_appointment_load($uid, $date, $active = FALSE) {
+  if ($active) {
+    $clauses = ' AND sa.status_flag = 1 AND sae.status_flag = 1 ';
+  }
+
+  if (($uid > 0) && ($date > 0)) {
+    // use end instead of start so we can find in-progress sessions
+    $result = db_fetch_object(db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag, sa.title, sa.body, sa.tutor_uid, sa.duration,
+                                               sa.repeat_interval, sa.repeat_count, sa.appointment_type
+                                        FROM {sb_appointment_event} AS sae
+                                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                                          LEFT JOIN sb_appointment_participants AS sap ON sae.appointment_id = sa.appointment_id
+                                        WHERE ( sae.start_datetime_utc > '%s' )
+                                          AND ( (sa.tutor_uid = %d) OR (sap.participant_uid = %d) )
+                                          $clauses
+                                        ORDER BY sae.start_datetime_utc ASC
+                                        LIMIT 1",
+				       $date, $uid, $uid));
+  }
+  return $result;
+}
+
+function sb_appointment_event_load ($args) {
+  if ($args['appointment_event_id']) {
+    $field = 'sse.appointment_event_id';
+    $id = $args['appointment_event_id'];
+  } else if ($args['appointment_id']) {
+    $field = 'sse.appointment_id';
+    $id = $args['appointment_id'];
+  }
+
+  if ($id > 0) {
+    $result = db_fetch_object(db_query("SELECT sae.*, sa.status_flag AS appointment_status_flag, sa.title, sa.body, sa.tutor_uid, sa.duration,
+                                               sa.repeat_interval, sa.repeat_count, sa.appointment_type, sa.hourly_rate, sa.rate_override
+                                        FROM {sb_appointment_event} AS sae
+                                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                                        WHERE $field = %d", $id));
+    return $result;
+  } else {
+    return "";
+  }
+}
+
+function sb_appointment_uid_load ($uid, $start = "", $end = "") {
+  if ($start && $end) {
+    $result = db_query("SELECT sae.*, sa.tutor_uid, sa.appointment_type, sa.title
+                        FROM sb_appointment_event AS sae
+                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                          LEFT JOIN sb_appointment_participants AS sap ON sae.appointment_id = sap.appointment_id
+                        WHERE (sa.tutor_uid = %d OR sap.participant_uid = %d)
+                          AND sae.start_datetime_utc BETWEEN '%s' AND '%s'
+                          AND sae.status_flag = 1
+                          AND sa.status_flag = 1
+                        ORDER BY sae.start_datetime_utc ASC",
+		       $uid, $uid,
+		       date_format($start, DATE_FORMAT_DATETIME),
+		       date_format($end, DATE_FORMAT_DATETIME)
+		       );
+  } else {
+    $result = db_query("SELECT sae.* sa.tutor_uid, sa.appointment_type
+                        FROM sb_appointment_event AS sae
+                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                          LEFT JOIN sb_appointment_participants AS sap ON sae.appointment_id = sap.appointment_id
+                        WHERE sa.tutor_uid = %d OR sap.participant_uid = %d
+                        ORDER BY sae.start_datetime_utc ASC",
+		       $uid, $uid);
+  }
+
+  $nodes = array();
+  while ($obj = db_fetch_object($result)) {
+    $nodes[] = $obj;
+  }
+  return $nodes;
+}
+
+function sb_appointment_date_load ($start, $end, $clause = "") {
+  $result = db_query("SELECT sae.*, sa.tutor_uid, sa.appointment_type, sa.title
+                        FROM sb_appointment_event AS sae
+                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                          LEFT JOIN sb_appointment_participants AS sap ON sae.appointment_id = sap.appointment_id
+                        WHERE sae.start_datetime_utc BETWEEN '%s' AND '%s'
+                          AND sae.status_flag = 1
+                          AND sa.status_flag = 1
+                          $clause
+                        ORDER BY sae.start_datetime_utc ASC",
+		       date_format($start, DATE_FORMAT_DATETIME),
+		       date_format($end, DATE_FORMAT_DATETIME)
+		       );
+  $nodes = array();
+  while ($obj = db_fetch_object($result)) {
+    $nodes[] = $obj;
+  }
+  return $nodes;
+}
+
+
+// given a schedule ID and optionally a schedule event, load everything associated with it
+function sb_appointment_by_schedule_id_load($id, $event = "") {
+  if ($event) {
+    $start = date_make_date($event->start_datetime_utc, "UTC");
+    $end = date_make_date($event->end_datetime_utc, "UTC");
+  }
+
+  if ($start && $end) {
+    $result = db_query("SELECT sae.*, sa.tutor_uid, sa.appointment_type, sa.title
+                        FROM sb_appointment_event AS sae
+                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                        WHERE sa.schedule_id = %d
+                          AND sae.status_flag = 1
+                          AND sa.status_flag = 1
+                          AND sae.start_datetime_utc BETWEEN '%s' AND '%s'
+                        ORDER BY sae.start_datetime_utc ASC",
+		       $id,
+		       date_format($start, DATE_FORMAT_DATETIME),
+		       date_format($end, DATE_FORMAT_DATETIME)
+		       );
+  } else {
+    $result = db_query("SELECT sae.*, sa.tutor_uid, sa.appointment_type, sa.title
+                        FROM sb_appointment_event AS sae
+                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                        WHERE sa.schedule_id = %d
+                          AND sae.status_flag = 1
+                          AND sa.status_flag = 1
+                        ORDER BY sae.start_datetime_utc ASC",
+		       $id);
+  }
+
+  $nodes = array();
+  while ($obj = db_fetch_object($result)) {
+    $nodes[] = $obj;
+  }
+  return $nodes;
+
+}
+
+
+
+/******************************************************************************************
+ ******************************************************************************************
+ *
+ * Administrative Load Functions
+ *
+ ******************************************************************************************
+ ******************************************************************************************/
+
+function count_tutors_with_sessions_today() {
+  $now = date_make_date(time(), user_tz());
+  $now_day = date_format($now, "Y-m-d");
+  $day_start = $now_day . " 00:00:00";
+  $day_end = $now_day . " 23:59:59";
+  $type = SCHEDULE_AVAILABILITY;
+
+  $day_start = date_make_date($day_start, user_tz($target_user));
+  date_timezone_set($day_start, timezone_open('UTC'));
+  $day_end = date_make_date($day_end, user_tz($target_user));
+  date_timezone_set($day_end, timezone_open('UTC'));
+
+  $result = db_query("SELECT COUNT(DISTINCT ss.uid)
+                      FROM sb_schedule_event AS sse
+                         INNER JOIN sb_schedule AS ss ON ss.schedule_id = sse.schedule_id
+                      WHERE sse.start_datetime_utc BETWEEN '%s' AND '%s'
+                        AND ss.schedule_type = %d
+                        AND ss.status_flag = 1 AND sse.status_flag = 1
+                      ORDER BY sse.start_datetime_utc ASC",
+		     date_format($day_start, DATE_FORMAT_DATETIME),
+		     date_format($day_end, DATE_FORMAT_DATETIME),
+		     $type);
+  $rows = array();
+
+  $record = db_result($result);
+  return $record;
+}
+
+function tutors_with_sessions_today($vacation = FALSE) {
+  $now = date_make_date(time(), user_tz());
+  $now_day = date_format($now, "Y-m-d");
+  $day_start = $now_day . " 00:00:00";
+  $day_end = $now_day . " 23:59:59";
+
+  if ($vacation) {
+    $type = SCHEDULE_VACATION;
+  } else {
+    $type = SCHEDULE_AVAILABILITY;
+  }
+
+  $day_start = date_make_date($day_start, user_tz($target_user));
+  date_timezone_set($day_start, timezone_open('UTC'));
+  $day_end = date_make_date($day_end, user_tz($target_user));
+  date_timezone_set($day_end, timezone_open('UTC'));
+
+  $result = db_query("SELECT sse.*, ss.schedule_type, ss.uid
+                      FROM sb_schedule_event AS sse
+                         INNER JOIN sb_schedule AS ss ON ss.schedule_id = sse.schedule_id
+                      WHERE sse.start_datetime_utc BETWEEN '%s' AND '%s'
+                        AND ss.schedule_type = %d
+                        AND ss.status_flag = 1 AND sse.status_flag = 1
+                      ORDER BY sse.start_datetime_utc ASC",
+		     date_format($day_start, DATE_FORMAT_DATETIME),
+		     date_format($day_end, DATE_FORMAT_DATETIME),
+		     $type);
+  $rows = array();
+
+  while ($data = db_fetch_object($result)) {
+    $rows[] = $data;
+  }
+
+  return $rows;
+}
+
+function sessions_today() {
+  $now = date_make_date(time(), user_tz());
+  $now_day = date_format($now, "Y-m-d");
+  $day_start = $now_day . " 00:00:00";
+  $day_end = $now_day . " 23:59:59";
+
+  $day_start = date_make_date($day_start, user_tz($target_user));
+  date_timezone_set($day_start, timezone_open('UTC'));
+  $day_end = date_make_date($day_end, user_tz($target_user));
+  date_timezone_set($day_end, timezone_open('UTC'));
+
+  $result = db_query("SELECT sae.*, sa.tutor_uid, sa.appointment_type, sa.title
+                      FROM sb_appointment_event AS sae
+                         INNER JOIN sb_appointment AS sa ON sa.appointment_id = sae.appointment_id
+                      WHERE sae.start_datetime_utc BETWEEN '%s' AND '%s'
+                        AND sa.status_flag = 1 AND sae.status_flag = 1
+                        AND ( (sa.appointment_type = %d) OR (sa.appointment_type = %d) )
+                      ORDER BY sae.start_datetime_utc ASC",
+		     date_format($day_start, DATE_FORMAT_DATETIME),
+		     date_format($day_end, DATE_FORMAT_DATETIME),
+		     $type, TUTOR_SESSION, GROUP_SESSION);
+  $rows = array();
+
+  while ($data = db_fetch_object($result)) {
+    $rows[] = $data;
+  }
+
+  return $rows;
+}
+
+
+/******************************************************************************************
+ ******************************************************************************************
+ *
+ * Helpers
+ *
+ ******************************************************************************************
+ ******************************************************************************************/
+
+function _construct_participant_string($appointment, $type, $show_skype = 1) {
+  if (! is_object($appointment)) {
+    $appointment = sb_appointment_load($appointment);
+  }
+  if ($type == "student" && ($appointment->appointment_type == GROUP_SESSION)) {
+    // special-case for group
+    $participants = sb_appointment_participants_load($appointment->appointment_id, "names");
+    $p = format_participant_array($participants);
+    return join (", ", $p);
+  } else {
+
+    if ($type == "tutor") {
+      $target_user = eto_user_load($appointment->tutor_uid);
+    } else {
+      $target_user = eto_user_load($appointment->student_uid_0);
+    }
+
+    global $user;
+    if ($show_skype && ($user->uid != $target_user->uid)) {
+      // not us, so show skype
+      $skype = "temp";
+    }
+
+    return theme('meeting_participant', $target_user, $skype);
+  }
+
+}
+
+function sb_encode($url) {
+  return preg_replace(array('/\+/', '/\//', '/=*$/'), array('-', '_', ''), base64_encode($url));
+}
+
+function sb_decode($url_encoded) {
+  return base64_decode(preg_replace(array('/-/', '/_/'), array('+', '/'), $url_encoded));
+}
+
+function sb_check_permissions ($t, $p, $not_found = 0) {
+  global $user;
+  if ($t) {
+    $t = eto_user_load(array('name' => $t));
+    if ($t->uid != $user->uid) {
+      if (!user_access($p)) {
+	if ($not_found) {
+	  drupal_not_found();
+	} else {
+	  drupal_access_denied();
+	}
+	exit;
+      }
+    }
+  } else {
+    $t = $user;
+  }
+  return $t;
+}
+
+function sb_user_base ($target_user) {
+  global $user;
+
+  if (! is_object($target_user)) {
+    if (is_numeric($target_user)) {
+      $target_user = eto_user_load($target_user);
+    } else {
+      $target_user = eto_user_load(array('name' => $target_user));
+    }
+  }
+
+  if (!$target_user) {
+    return "";
+  }
+
+  if ($target_user->uid == $user->uid) {
+    return "user";
+  } else {
+    return "users/" . $target_user->name;
+  }
+
+}
+
+function sb_parse_arg($arg) {
+  $arg = sb_decode($arg);
+  $array = explode("-", $arg);
+  return $array;
+}
+
+function schedule_url($base, $id, $instance = "", $action = "") {
+  $token = sb_encode($id . ($instance ? "-" . $instance : ""));
+  return $base . "calendar/" . $token . ($action ? "/$action" : "");
+}
+
+function appointment_url($base, $id, $instance = "", $action = "") {
+  $token = sb_encode($id . ($instance ? "-" . $instance : ""));
+  return $base . "appointments/" . $token . ($action ? "/$action" : "");
+}
+
+

@@ -1,0 +1,5 @@
+name = SB Billing
+description = Billing Functionality
+package = Stonebytes
+core = 6.x
+version = "6.x-1.0"

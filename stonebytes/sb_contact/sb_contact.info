@@ -1,0 +1,6 @@
+; $Id: sb contact.info,v 1.4 2007/06/08 05:50:54 dries Exp $
+name = SB Contact
+description = (Replacement for Drupal Contact Form) Enables the use of both personal and site-wide contact forms.
+package = Stonebytes
+version = VERSION
+core = 6.x

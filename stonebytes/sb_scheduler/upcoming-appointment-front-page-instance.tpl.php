@@ -1,0 +1,1 @@
+Appointment '<? print $appointment_title; ?>' <? print $time_string; ?>.  <? print $vyew_link; ?><br>

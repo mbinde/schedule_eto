@@ -1,0 +1,1 @@
+<p><strong><? print $title; ?>:</strong> <? print $content; ?></p>

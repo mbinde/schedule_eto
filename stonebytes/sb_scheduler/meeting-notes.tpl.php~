@@ -1,0 +1,6 @@
+<div class='notes-top'></div>
+<div class='notes'>
+   <h2>Notes:</h2>
+   <? print $notes; ?>
+   <p></p>
+</div>

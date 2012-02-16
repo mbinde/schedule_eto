@@ -1,0 +1,7 @@
+<table>
+<tr>
+<td><strong><? print $tutor_title;   ?>:</strong> <? print $tutor; ?></td>
+<td><strong><? print $student_title; ?>:</strong> <? print $students; ?></td>
+</tr>
+</table>
+
