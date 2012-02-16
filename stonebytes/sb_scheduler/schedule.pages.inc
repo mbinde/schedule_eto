@@ -1619,7 +1619,7 @@ function theme_appointment_details ($appointment, $first, $last, $event) {
       $output .= "<br><span>Canceled in error? " . l('Reinstate this appointment series.', "appointments/" . sb_encode($appointment->appointment_id) . "/reinstate") . "</span>";
     }
   } else if (user_access('view all appointments') || ($appointment->tutor_uid == $user->uid)) {
-    $output .= "<br><span class='canceled'>" . l('Cancel all appointments in this series.', "appointments/" . sb_encode($appointment->appointment_id) . "/cancel") . "</span>";
+    $output .= "<br><span class='canceled'>" . l('Cancel all future appointments in this series.', "appointments/" . sb_encode($appointment->appointment_id) . "/cancel") . "</span>";
   }
 
   if ($event) {
@@ -2636,12 +2636,13 @@ function user_schedule_appointment_action($arg, $action) {
 	|| ( ($appointment->appointment_type == TUTOR_SESSION) && (isa_participant($id, $user->uid)) )
 	|| ( ($appointment->appointment_type == GROUP_SESSION) && ($appointment->tutor_uid == $user->uid) ) ) {
       if ($instance != "") {
-	$output .= "<p><em>Did you want to $action all sessions in this appointment series?<br>If so, click here instead: <strong>" .
-	  l("$action_string all appointments in this series",
+	$output .= "<p><em>Did you want to $action all future sessions in this appointment series?<br>If so, click here instead: <strong>" .
+	  l("$action_string all future sessions in this series",
 	    appointment_url("", $id, "", $action)) . "</strong></em></p>";
       } else {
 	$event = $appointment;
 	$noun = " series";
+        $action_string = "Cancel all future appointments in the";
       }
     }
 
@@ -2650,6 +2651,18 @@ function user_schedule_appointment_action($arg, $action) {
     $date_string = "on " . date_format($date, DATE_FORMAT_ETO_LONG) . " at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
 
     $output .= "<h2>$action_string appointment " . $noun. " <em>'" . $appointment->title . "'</em> $date_string</h2>";
+
+    if (($action == "cancel") && ($instance == "")) {
+        $cancel_count = count(sb_appointment_event_load(array(
+                            'appointment_id' => $event->appointment_id,
+                            'from_date' => date(DATE_FORMAT_DATETIME))));
+        $total_count = count(sb_appointment_event_load(array(
+                            'appointment_id' => $event->appointment_id
+                         )));
+        $output .= "This will cancel $cancel_count of the $total_count events in the series.";
+    }
+
+
     $tutor_string = _construct_participant_string($appointment, "tutor", 0);
     $student_string = _construct_participant_string($appointment, "student", 0);
     $output .= theme('meeting_participants', $tutor_string, $student_string);
@@ -2729,7 +2742,7 @@ function sb_cancel_appointment_form (&$form_state, $node) {
 
   $form['submit'] = array (
 			   '#type' => 'submit',
-			   '#value' => 'Yes, cancel this appointment' . $noun,
+			   '#value' => 'Yes, cancel future sessions of this appointment' . $noun,
 			   );
 
   $form['#submit'] = array('sb_cancel_appointment_submit_handler');
