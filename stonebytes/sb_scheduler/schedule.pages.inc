@@ -2857,6 +2857,10 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
                   'from_date' => $from_date));
       $event = $events[0];
 
+      // if they only had one appointment remaining, let's pretend they
+      // only cancelled one appointment instead of the series
+      $isa_series = 0;
+
       sb_appointment_cancel($form_state['values']['appointment_id']);
 
       $date = date_make_date($event->start_datetime_utc, "UTC");
