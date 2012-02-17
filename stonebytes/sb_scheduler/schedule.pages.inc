@@ -2859,7 +2859,9 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 
       // if they only had one appointment remaining, let's pretend they
       // only cancelled one appointment instead of the series
-      $isa_series = 0;
+      if (count($events) == 1) {
+        $isa_series = 0;
+      }
 
       sb_appointment_cancel($form_state['values']['appointment_id']);
 
