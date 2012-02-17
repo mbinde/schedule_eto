@@ -686,15 +686,20 @@ function template_preprocess_tutor_session_time(&$vars) {
 function theme_cancellations_summary($event) {
   $output = "\n";
 
-  $cancellations = sb_cancel_log_event_load($event->appointment_event_id);
-  if (count($cancellations) > 0) {
-    $output = "<ul>";
-    foreach ($cancellations as $c) {
-      $output .= theme('cancellation_log_item', $c);
-    }
-    $output .= "</ul>\n";
+  if ($event->appointment_event_id == 0) {
+    return '';
   }
-  return $output;
+  else {
+    $cancellations = sb_cancel_log_event_load($event->appointment_event_id);
+    if (count($cancellations) > 0) {
+      $output = "<ul>";
+      foreach ($cancellations as $c) {
+        $output .= theme('cancellation_log_item', $c);
+      }
+      $output .= "</ul>\n";
+    }
+    return $output;
+  }
 }
 
 function template_preprocess_vyew_room(&$vars) {

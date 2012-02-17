@@ -409,7 +409,6 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
       $output .= "If so, select one below:";
 
       $output .= theme('child_event_list', $event, $target_user, "cancel");
-
     }
   }
 
