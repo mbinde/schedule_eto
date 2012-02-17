@@ -2796,10 +2796,18 @@ function sb_cancel_appointment_form (&$form_state, $node) {
 			'#maxlength' => 255,
 			);
 
-  $form['submit'] = array (
-			   '#type' => 'submit',
-			   '#value' => 'Yes, cancel future sessions of this appointment' . $noun,
-			   );
+  if ($noun == 'series') {
+    $form['submit'] = array (
+      '#type' => 'submit',
+      '#value' => 'Yes, cancel future sessions of this appointment' . $noun,
+    );
+  }
+  else {
+    $form['submit'] = array (
+      '#type' => 'submit',
+      '#value' => 'Yes, cancel this appointment' . $noun,
+    );
+  }
 
   $form['#submit'] = array('sb_cancel_appointment_submit_handler');
 
