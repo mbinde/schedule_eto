@@ -581,9 +581,11 @@ function sb_scheduler_theme() {
   $themes['appointment_event_item'] = array ('arguments' => array('appointment' => NULL))
 ;
   $themes['session_status'] = array ('arguments' => array('event' => NULL,
-							  'now' => NULL));
+                                                  'now' => NULL,
+                              'target_user' => NULL));
 
-  $themes['cancel_this'] = array ('arguments' => array('event' => NULL));
+  $themes['cancel_this'] = array ('arguments' => array('event' => NULL,
+                           'target_user' => NULL));
 
   $themes['cancellation_log_item'] = array ('arguments' => array('cancellation' => NULL));
 
@@ -794,21 +796,46 @@ function theme_appointment_event_item($event) {
   return "<span $class>" . $date_string . " " . theme('session_status', $event, $date, $now) . "</span>\n";
 }
 
-function theme_session_status($event, $date, $now) {
+function is_appointment ($obj) {
+  if (property_exists($obj,'appointment_id')
+    || property_exists($obj, 'appointment_event_id')) {
+
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+function theme_session_status($event, $date, $now, $target_user = "") {
+  // is this an appointment or an availability?
   $output = "";
   if (is_cancelled($event)) {
     $output = "<span class='cancelled'>Cancelled</span>";
   } else if ($date > $now) {
-    $output = "<span class='upcoming'>Upcoming</span> " . theme_cancel_this($event) . " " . theme('cancellations_summary', $event);
+    $output = "<span class='upcoming'>Upcoming</span> " . theme_cancel_this($event, $target_user);
+    if (is_appointment($event)) {
+      $output .= " " . theme('cancellations_summary', $event);
+    }
   }
   return $output;
 }
 
 function is_cancelled($event) {
-  if ( (isset($event->status_flag) && ($event->status_flag == 0))
-       || (isset($event->appointment_status_flag) && ($event->appointment_status_flag == 0) ) ) {
-    return 1;
+  if (is_appointment($event)) {
+    if ( (isset($event->status_flag) && ($event->status_flag == 0))
+      || (isset($event->appointment_status_flag) && ($event->appointment_status_flag == 0) ) ) {
+      return 1;
+    }
   }
+  else {
+    if ( (isset($event->status_flag) && ($event->status_flag) == 0)
+      || (isset($event->schedule_status_flag) && ($event->appointment_status_flag == 0))) {
+      return 1;
+    }
+  }
+  // else
+  return 0;
 }
 
 function only_event_is_cancelled($event) {
@@ -835,11 +862,23 @@ function sb_cancel_log_event_load($id) {
   return $items;
 }
 
-function theme_cancel_this($event) {
-  return "<span class='cancel-this'>"
-    . l("[cancel this]",
-      appointment_url("", $event->appointment_id, $event->appointment_event_id, "cancel"))
-    . "</span>";
+function theme_cancel_this($event, $target_user = "") {
+  if (is_appointment($event)) {
+    return "<span class='cancel-this'>"
+      . l("[cancel this]",
+        appointment_url("", $event->appointment_id, $event->appointment_event_id, "cancel"))
+      . "</span>";
+  }
+  else {
+    return "<span class='cancel-this'>"
+      . l("[cancel this]",
+        schedule_url(
+          sb_user_base($target_user) . '/',
+          $event->schedule_id,
+          $event->schedule_event_id,
+          "cancel"))
+      . "</span>";
+  }
 }
 
 function theme_cancellation_log_item($obj) {
@@ -880,7 +919,7 @@ function theme_child_event_list ($event, $target_user, $action = "") {
       else {
         $output .= $event_string;
       }
-      $output .= ' ' . theme('session_status', $e, $date, $now);
+      $output .= ' ' . theme('session_status', $e, $date, $now, $target_user);
       $output .= "</li>";
     }
     $output .= "</ul>";
