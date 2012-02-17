@@ -2781,7 +2781,7 @@ function sb_cancel_appointment_form (&$form_state, $node) {
 					  '#value' => $node->appointment_event_id
 					  );
   } else {
-    $noun = " series";
+    $noun = "series";
   }
   $form['appointment_id'] = array(
 					'#type' => 'hidden',
