@@ -2799,13 +2799,13 @@ function sb_cancel_appointment_form (&$form_state, $node) {
   if ($noun == 'series') {
     $form['submit'] = array (
       '#type' => 'submit',
-      '#value' => 'Yes, cancel future sessions of this appointment' . $noun,
+      '#value' => 'Yes, cancel future sessions of this appointment ' . $noun,
     );
   }
   else {
     $form['submit'] = array (
       '#type' => 'submit',
-      '#value' => 'Yes, cancel this appointment' . $noun,
+      '#value' => 'Yes, cancel this appointment ' . $noun,
     );
   }
 
