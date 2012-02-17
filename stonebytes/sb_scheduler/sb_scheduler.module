@@ -1528,7 +1528,7 @@ function sb_appointment_event_load ($args) {
                                         FROM {sb_appointment_event} AS sae
                                           INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
                                         WHERE $field = %d" . $date_where_clause . ' ORDER BY sae.start_datetime_utc',
-                $id, $form_date);
+                $id, $from_date);
       while ($row = db_fetch_object($result)) {
         $data[] = $row;
       }

@@ -364,9 +364,11 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
     if ($noun == "series") {
       $output .= "<h2>$action_string future occurences of schedule " . $noun. " $date_string</h2>";
       if ($action == 'cancel') {
+        $now = date_make_date(time(), "UTC");
+        $from_date = date_format($now, DATE_FORMAT_DATETIME);
         $cancel_count = count(sb_schedule_event_load(array(
                             'schedule_id' => $event->schedule_id,
-                            'from_date' => date(DATE_FORMAT_DATETIME))));
+                            'from_date' => $from_date)));
         $total_count = count(sb_schedule_event_load(array(
                             'schedule_id' => $event->schedule_id
                          )));
@@ -502,9 +504,12 @@ function sb_schedule_cancel ($schedule_id) {
   db_query('UPDATE {sb_schedule} SET status_flag = 0 WHERE schedule_id = %d',
 	   $schedule_id);
   */
+  $now = date_make_date(time(), "UTC");
+  $from_date = date_format($now, DATE_FORMAT_DATETIME);
+
   $events = sb_schedule_event_load(array(
               'schedule_id' => $schedule_id,
-              'from_date' => date(DATE_FORMAT_DATETIME)));
+              'from_date' => $from_date));
   foreach ($events as $e) {
     sb_schedule_event_cancel($e->schedule_event_id);
   }
@@ -1357,7 +1362,7 @@ function sb_date_extract($date, $part) {
       else if (preg_match('/:(\d+)/', $part, $m)) {
         $minute = $m[1];
       }
-      else if (preg_match('/pm/i', $part)) {
+      else if (preg_match('/pm/i', $part) && ($hour < 12)) {
         $hour += 12;
       }
     }
@@ -1536,7 +1541,9 @@ function sb_appointment_view($arg) {
 	$event = $selected_event;
       } else {
 	// change our start/end to the next instance if we didn't ask for a particular one
-	$next = sb_appointment_next_event_load($appointment->appointment_id, date(DATE_FORMAT_DATETIME)); // FIXME?
+        $now = date_make_date(time(), "UTC");
+        $from_date = date_format($now, DATE_FORMAT_DATETIME);
+	$next = sb_appointment_next_event_load($appointment->appointment_id, $from_date); // FIXME?
 
 	if ($next) {
 	  $event = $next;
@@ -2653,13 +2660,15 @@ function user_schedule_appointment_action($arg, $action) {
     $output .= "<h2>$action_string appointment " . $noun. " <em>'" . $appointment->title . "'</em> $date_string</h2>";
 
     if (($action == "cancel") && ($instance == "")) {
-        $cancel_count = count(sb_appointment_event_load(array(
-                            'appointment_id' => $event->appointment_id,
-                            'from_date' => date(DATE_FORMAT_DATETIME))));
-        $total_count = count(sb_appointment_event_load(array(
-                            'appointment_id' => $event->appointment_id
-                         )));
-        $output .= "This will cancel $cancel_count of the $total_count events in the series.";
+      $now = date_make_date(time(), "UTC");
+      $from_date = date_format($now, DATE_FORMAT_DATETIME);
+      $cancel_count = count(sb_appointment_event_load(array(
+                          'appointment_id' => $event->appointment_id,
+                          'from_date' => $from_date)));
+      $total_count = count(sb_appointment_event_load(array(
+                         'appointment_id' => $event->appointment_id
+                       )));
+      $output .= "This will cancel $cancel_count of the $total_count events in the series.";
     }
 
 
@@ -2786,9 +2795,11 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
       $isa_series = 1;
 
       // for our "event", use the first cancelled one in a series
+      $now = date_make_date(time(), "UTC");
+      $from_date = date_format($now, DATE_FORMAT_DATETIME);
       $events = sb_appointment_event_load(array(
                   'appointment_id' => $form_state['values']['appointment_id'],
-                  'from_date' => date(DATE_FORMAT_DATETIME)));
+                  'from_date' => $from_date));
       $event = $events[0];
 
       sb_appointment_cancel($form_state['values']['appointment_id']);
@@ -2963,16 +2974,16 @@ function sb_appointment_cancel ($appointment_id) {
   db_query('UPDATE {sb_appointment} SET status_flag = 0 WHERE appointment_id = %d',
 	   $appointment_id);
   */
+  $now = date_make_date(time(), "UTC");
+  $from_date = date_format($now, DATE_FORMAT_DATETIME);
+
   $events = sb_appointment_event_load(array(
               'appointment_id' => $appointment_id,
-              'from_date' => date(DATE_FORMAT_DATETIME)));
-  print_r2($events);exit;
-  foreach ($events as $e) {
-    print_r2($e);
-    //    sb_appointment_event_cancel($e->appointment_event_id);
-  }
-  exit;
+              'from_date' => $from_date));
 
+  foreach ($events as $e) {
+    sb_appointment_event_cancel($e->appointment_event_id);
+  }
 }
 
 function sb_appointment_event_cancel ($event_id) {
