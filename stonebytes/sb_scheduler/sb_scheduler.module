@@ -1620,10 +1620,27 @@ function sb_appointment_date_load ($start, $end, $clause = "") {
 
 
 // given a schedule ID and optionally a schedule event, load everything associated with it
-function sb_appointment_by_schedule_id_load($id, $event = "") {
+function sb_appointment_by_schedule_id_load($args) {
+
+  $id = isset($args['id']) ? $args['id'] : FALSE;
+  $event = isset($args['event']) ? $args['event'] : FALSE;
+  $from_date = isset($args['from_date']) ? $args['from_date'] : FALSE;
+
   if ($event) {
-    $start = date_make_date($event->start_datetime_utc, "UTC");
+    if ($from_date) {
+      $start = $from_date;
+    }
+    else {
+      $start = date_make_date($event->start_datetime_utc, "UTC");
+      $start = date_format($start, DATE_FORMAT_DATETIME);
+    }
     $end = date_make_date($event->end_datetime_utc, "UTC");
+    $end = date_format($end, DATE_FORMAT_DATETIME);
+
+    $date_where_clause = '';
+  }
+  else if ($from_date) {
+    $date_where_clause = ' AND sae.start_datetime_utc >= \'%s\'';
   }
 
   if ($start && $end) {
@@ -1635,19 +1652,19 @@ function sb_appointment_by_schedule_id_load($id, $event = "") {
                           AND sa.status_flag = 1
                           AND sae.start_datetime_utc BETWEEN '%s' AND '%s'
                         ORDER BY sae.start_datetime_utc ASC",
-		       $id,
-		       date_format($start, DATE_FORMAT_DATETIME),
-		       date_format($end, DATE_FORMAT_DATETIME)
-		       );
+              $id,
+              $start,
+              $end
+    );
   } else {
     $result = db_query("SELECT sae.*, sa.tutor_uid, sa.appointment_type, sa.title
                         FROM sb_appointment_event AS sae
                           INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
                         WHERE sa.schedule_id = %d
                           AND sae.status_flag = 1
-                          AND sa.status_flag = 1
+                          AND sa.status_flag = 1 " . $date_where_clause . "
                         ORDER BY sae.start_datetime_utc ASC",
-		       $id);
+              $id, $from_date);
   }
 
   $nodes = array();

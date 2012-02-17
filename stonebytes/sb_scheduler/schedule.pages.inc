@@ -44,10 +44,13 @@ function sb_view_schedule_block($target_user, $arg) {
       exit;
     }
     $noun = "block";
-    $existing_appointments = sb_appointment_by_schedule_id_load($id, $event);
+    $existing_appointments = sb_appointment_by_schedule_id_load(array(
+                               'id' => $id,
+                               'event' => $event));
   } else {
     $noun = "series";
-    $existing_appointments = sb_appointment_by_schedule_id_load($id);
+    $existing_appointments = sb_appointment_by_schedule_id_load(array(
+                               'id' => $id));
   }
 
 
@@ -296,10 +299,18 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
       exit;
     }
     $noun = "block";
-    $existing_appointments = sb_appointment_by_schedule_id_load($id, $event);
+    $existing_appointments = sb_appointment_by_schedule_id_load(array(
+                               'id' => $id,
+                               'event' => $event));
   } else {
     $noun = "series";
-    $existing_appointments = sb_appointment_by_schedule_id_load($id);
+
+    $now = date_make_date(time(), "UTC");
+    $from_date = date_format($now, DATE_FORMAT_DATETIME);
+
+    $existing_appointments = sb_appointment_by_schedule_id_load(array(
+                               'id' => $id,
+                               'from_date' => $from_date));
   }
 
   // cannot cancel a canceled schedule block; cannot reinstate a non-canceled schedule block
@@ -469,10 +480,12 @@ function sb_cancel_schedule_submit_handler($form, &$form_state) {
 
   if ($form_state['values']['schedule_event_id']) {
     $event = sb_schedule_event_load(array('schedule_event_id' => $form_state['values']['schedule_event_id']));
-    $existing_appointments = sb_appointment_by_schedule_id_load($form_state['values']['schedule_id'],
-								$event);
+    $existing_appointments = sb_appointment_by_schedule_id_load(array(
+                               'id' => $form_state['values']['schedule_id'],
+                               'event' => $event));
   } else {
-    $existing_appointments = sb_appointment_by_schedule_id_load($form_state['values']['schedule_id']);
+    $existing_appointments = sb_appointment_by_schedule_id_load(array(
+                               'id' => $form_state['values']['schedule_id']));
   }
 
   // first cancel each affected appointment, then cancel the time block
@@ -1370,6 +1383,9 @@ function sb_date_extract($date, $part) {
       else if (preg_match('/pm/i', $part) && ($hour < 12)) {
         $hour += 12;
       }
+      else if (preg_match('/am/i', $part) && ($hour == 12)) {
+        $hour = '00';
+      }
     }
 
     return "$hour:$minute:00";
@@ -2040,7 +2056,7 @@ function sb_appointment_form(&$form_state, $node) {
 					   );
 
     // if we're working with a block, we can calculate availble duration times. otherwise have to wing it
-    if ($block_exists) {
+    if ($node->block_exists) {
       $avail = _available_durations($node->start_datetime_utc, $node->tutor_uid);
       $avail_text = ( (count($avail) < 4) ? "If you want a longer session, please pick a time when the tutor has a longer block of time available." : "");
     }
@@ -2048,17 +2064,17 @@ function sb_appointment_form(&$form_state, $node) {
       $avail = _available_durations();
     }
     $form['participants']['rates']['duration'] = array (
-							'#type' => 'radios',
-							'#options' => $avail,
-							'#default_value' => $default['duration'],
-							'#title' => 'Select your session duration',
-							'#description' => $avail_text,
-							'#ahah' => array(
-									 'event' => 'change',
-									 'path' => ahah_helper_path(array('participants')),
-									 'wrapper' => 'participants-wrapper',
-									 ),
-							);
+      '#type' => 'radios',
+      '#options' => $avail,
+      '#default_value' => $default['duration'],
+      '#title' => 'Select your session duration',
+      '#description' => $avail_text,
+      '#ahah' => array(
+        'event' => 'change',
+        'path' => ahah_helper_path(array('participants')),
+        'wrapper' => 'participants-wrapper',
+      ),
+    );
     $form['participants']['rates']['hourly_rate_markup'] = array (
 								  '#type' => 'markup',
 								  '#value' => '<strong>Rate:</strong> ' . theme('sb_rate', $default['hourly_rate_calculated'], '$') . '/hour' . " (" . sb_get_hourly_rate($node->tutor_uid, $node->start_datetime_utc, $default['duration'], TRUE) . ")",
