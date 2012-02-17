@@ -484,8 +484,12 @@ function sb_cancel_schedule_submit_handler($form, &$form_state) {
                                'id' => $form_state['values']['schedule_id'],
                                'event' => $event));
   } else {
+    $now = date_make_date(time(), "UTC");
+    $from_date = date_format($now, DATE_FORMAT_DATETIME);
+
     $existing_appointments = sb_appointment_by_schedule_id_load(array(
-                               'id' => $form_state['values']['schedule_id']));
+                               'id' => $form_state['values']['schedule_id'],
+                               'from_date' => $from_date));
   }
 
   // first cancel each affected appointment, then cancel the time block
