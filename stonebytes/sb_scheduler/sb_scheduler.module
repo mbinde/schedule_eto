@@ -357,25 +357,44 @@ function _qf_time ($date) { return date_format($date, "His"); }
 function _schedule_decode_time_args($arg) {
   $arg = sb_decode($arg);
   $arg_array = explode("/", $arg);
-
   $output = array();
-  $output['schedule_id'] = $arg_array[0];
-  $output['schedule_event_id'] = $arg_array[1];
-  $output['interval_count'] = $arg_array[2];
 
-  $block = sb_schedule_event_load(array('schedule_event_id' => $output['schedule_event_id']));
+  if (is_numeric($arg_array[0]) || is_numeric($arg_array[1])) {
+    // we have a schedule ID or event ID of some sort
+    $output['schedule_id'] = $arg_array[0];
+    $output['schedule_event_id'] = $arg_array[1];
+    $output['interval_count'] = $arg_array[2];
 
-  if ($block) {
-    $start = $block->start_datetime_utc;
-    $start = date_make_date($start, "UTC");
-    $output['start_date_utc'] = clone $start;
+    $block = sb_schedule_event_load(array('schedule_event_id' => $output['schedule_event_id']));
 
-    $interval = new DateInterval("PT" . 15 * $output['interval_count'] . "M");
-    $date = date_add($start, $interval);
-    $output['target_date_utc'] = clone $date;
+    if ($block) {
+      $start = $block->start_datetime_utc;
+      $start = date_make_date($start, "UTC");
+      $output['start_date_utc'] = clone $start;
 
-    date_timezone_set($date, timezone_open(user_tz()));
-    $output['target_date_user'] = $date;
+      $interval = new DateInterval("PT" . 15 * $output['interval_count'] . "M");
+      $date = date_add($start, $interval);
+      $output['target_date_utc'] = clone $date;
+
+      date_timezone_set($date, timezone_open(user_tz()));
+      $output['target_date_user'] = $date;
+
+      $output['block_exists'] = 1;
+    }
+  }
+  else {
+    // we have just a date, so we'll need to set a date and time in the UI later
+    $date = date_make_date($arg_array[0], timezone_open(user_tz()));
+
+    $output['chosen_date'] = $arg_array[0];
+    $output['target_date_user'] = clone $date;
+    $output['target_date_utc'] = $date;
+
+    // not sure it's right to set those two as the same, but seems conceptually correct,
+    // as the user is picking the date in his own timezone and we don't want the international
+    // date line to make it start jumping boundaries when we don't know the time yet
+
+    $output['block_exists'] = 0;
   }
 
   return $output;

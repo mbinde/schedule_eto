@@ -959,6 +959,12 @@ function callback_user_schedule_fetch ($target_date = "", $target_user = "", $re
 
   $output .= "<h2>Available times on " . date_format($target_date, "M jS, Y") . "$today:</h2>";
 
+  // add a link to manually schedule an appointment
+  if ( ($target_user->uid == $user->uid) || user_access("administer the site") ) {
+    $url = 'users/' . $target_user->name . '/schedule/appointment/' . sb_encode(date_format($target_date, DATE_FORMAT_DATETIME));
+    $output .= '<p>' . l('Click here to schedule an appointment with a student.', $url) . '</p>';
+  }
+
   if ($vacation) {
     $v = sb_schedule_load($vacation[0]->schedule_id);
     $start = date_make_date($v->start_datetime_utc, "UTC");
@@ -1662,7 +1668,11 @@ function user_schedule_appointment_display ($name, $arg) {
   }
 
   $app = _schedule_decode_time_args($arg);
-  $title = "Schedule session with " . $name . " on " . date_format($app['target_date_user'], 'M jS, Y') . " at " . date_format($app['target_date_user'], 'g:ia');
+
+  $title = "Schedule session with " . $name . " on " . date_format($app['target_date_user'], 'M jS, Y');
+  if ($app['block_exists']) {
+    $title .= " at " . date_format($app['target_date_user'], 'g:ia');
+  }
   drupal_set_title($title);
 
   $output .= "<h2>" . $title . "</h2>";
@@ -1670,7 +1680,7 @@ function user_schedule_appointment_display ($name, $arg) {
   // if we're a student, we can't schedule appointments in the past; if we're a tutor, warn
 
   $now = date_make_date(time(), 'UTC');
-  if ($now >= $app['target_date_utc']) {
+  if (($now >= $app['target_date_utc']) && $app['block_exists']) {
     if (user_access("is a tutor") || user_access("administer the site")) {
       drupal_set_message("Warning: you are scheduling an appointment in the past.", "warning");
     } else {
@@ -1681,7 +1691,7 @@ function user_schedule_appointment_display ($name, $arg) {
   } else {
     $interval = new DateInterval('PT' . variable_get('eto_minimum_appointment_lead_time', 6) . 'H');
     date_add($now, $interval);
-    if ($now >= $app['target_date_utc']) {
+    if (($now >= $app['target_date_utc']) && $app['block_exists']) {
       if (user_access("is a tutor") || user_access("administer the site")) {
 	drupal_set_message("Warning: you are scheduling an appointment within " . variable_get('eto_minimum_appointment_lead_time', 6) . " hours.", "warning");
       } else {
@@ -1701,6 +1711,7 @@ function user_schedule_appointment_display ($name, $arg) {
 		'schedule_id' => $app['schedule_id']);
   $node['tutor_uid'] = $calendar_user->uid;
   $node['start_datetime_utc'] = date_format($app['target_date_utc'], DATE_FORMAT_DATETIME);
+  $node['block_exists'] = $app['block_exists'];
 
   $output .= drupal_get_form('sb_appointment_form', (object) $node);
 
@@ -1878,6 +1889,18 @@ function sb_appointment_form(&$form_state, $node) {
 				   );
   }
 
+  if (user_access('is a tutor') && (! $node->block_exists)) {
+    $form['start_time'] = array (
+      '#type' => 'textfield',
+      '#field_suffix' => $timezone_suffix,
+      '#title' => 'Start Time' . $timezone_suffix,
+      '#default_value' => ($node->start_datetime_owner ? $node->start_datetime_owner : ""),
+      '#description' => "Format: 9:30am",
+      '#required' => TRUE,
+      '#size' => 8,
+      '#attributes' => array ('tabindex' => 1),
+    );
+  }
 
 
   /****************************************
@@ -2016,8 +2039,15 @@ function sb_appointment_form(&$form_state, $node) {
 					   '#suffix' => "</div>",
 					   '#tree' => TRUE,
 					   );
-    $avail = _available_durations($node->start_datetime_utc, $node->tutor_uid);
-    $avail_text = ( (count($avail) < 4) ? "If you want a longer session, please pick a time when the tutor has a longer block of time available." : "");
+
+    // if we're working with a block, we can calculate availble duration times. otherwise have to wing it
+    if ($block_exists) {
+      $avail = _available_durations($node->start_datetime_utc, $node->tutor_uid);
+      $avail_text = ( (count($avail) < 4) ? "If you want a longer session, please pick a time when the tutor has a longer block of time available." : "");
+    }
+    else {
+      $avail = _available_durations();
+    }
     $form['participants']['rates']['duration'] = array (
 							'#type' => 'radios',
 							'#options' => $avail,
@@ -2106,8 +2136,23 @@ function sb_appointment_form(&$form_state, $node) {
   return $form;
 }
 
-// $form, &$form_state
+
 function sb_appointment_validate($form, &$form_state) {
+  // if we have a start_time set, it means we're setting a free-form appointment.
+  // the start_time will be in the users timezone. we also have a UTC date in start_datetime_utc
+  if (isset($form_state['values']['start_time'])) {
+    $date = explode(' ', $form_state['values']['start_datetime_utc']);
+    $date = $date[0] . ' ' . sb_date_extract($form_state['values']['start_time'], 'time');
+    $date = date_create($date);
+    date_timezone_set($date, timezone_open('UTC'));
+
+    $form_state['values']['start_datetime_utc'] = date_format($date, DATE_FORMAT_DATETIME);
+    $verify_block = FALSE;
+  }
+  else {
+    $verify_block = TRUE;
+  }
+
   if ($form_state['values']['hourly_rate']) {
     // needs to be of the form: 00.00 or 00, with an optional initial dollar sign
     $value = sb_rate_validate($form_state['values']['hourly_rate']);
@@ -2116,7 +2161,9 @@ function sb_appointment_validate($form, &$form_state) {
     }
   }
   $tutor = eto_user_load($form_state['values']['participants']['tutor_uid']);
-  $avail = _available_durations($form_state['values']['start_datetime_utc'], $tutor->uid, $form_state['values']['participants']['appointment_type']);
+
+  $avail = _available_durations($form_state['values']['start_datetime_utc'], $tutor->uid, $form_state['values']['participants']['appointment_type'], $verify_block);
+
   if ($form_state['values']['participants']['appointment_type'] == PERSONAL_SESSION) {
     $max = 180;
   } else {
@@ -3118,20 +3165,31 @@ function sb_reinstate_appointment_submit_handler($form, &$form_state) {
  * 'date' is a DATE_FORMAT_DATETIME in UTC
  */
 
-function _available_durations($start, $uid, $type = "") {
+function _available_durations($start = '', $uid = '', $type = "", $verify_block = TRUE) {
+
+  if (!$start) {
+    // return everything
+    return array(15 => 15, 30 => 30, 45 => 45, 60 => 60);
+  }
   // get the next appointment scheduled after this one
   $appointment = sb_appointment_next_appointment_load($uid, $start, TRUE);
-  // we also need our block end
-  $block = sb_schedule_event_time_load($uid, $start, TRUE);
-
+  // we also need our block end if relevant
+  if ($verify_block) {
+    $block = sb_schedule_event_time_load($uid, $start, TRUE);
+    $block_date = date_make_date($block->end_datetime_utc, "UTC");
+  }
   $start_date = date_make_date($start, "UTC");
   $app_date = date_make_date($appointment->start_datetime_utc, "UTC");
-  $block_date = date_make_date($block->end_datetime_utc, "UTC");
 
   // our comparison date is whichever happens first: next appointment or end of our block of time
   if (! $app_date) {
-    $limit_date = $block_date;
-  } else if ( $app_date > $block_date) {
+      if ($verify_block) {
+        $limit_date = $block_date;
+      }
+      else {
+        $limit_date = -1;
+      }
+  } else if ( ( $app_date > $block_date) && $verify_block) {
     $limit_date = $block_date;
   } else {
     $limit_date = $app_date;
