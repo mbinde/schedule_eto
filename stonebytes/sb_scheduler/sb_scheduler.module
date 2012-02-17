@@ -1243,7 +1243,7 @@ function sb_schedule_event_load ($args) {
       $result = db_query("SELECT sse.*, ss.uid
                           FROM {sb_schedule_event} AS sse
                           INNER JOIN {sb_schedule} AS ss ON sse.schedule_id = ss.schedule_id
-                          WHERE $field = %d" . $date_where_clause . ' ORDER BY sae.start_datetime_utc',
+                          WHERE $field = %d" . $date_where_clause . ' ORDER BY sse.start_datetime_utc',
                 $id, $from_date);
       while ($row = db_fetch_object($result)) {
 	$data[] = $row;
