@@ -2373,7 +2373,7 @@ function sb_appointment_submit_handler($form, &$form_state) {
 
 
       // always email
-      if (can_email_tutor($u)) {
+      if (can_email_tutor($tutor)) {
 	$params = array('tutor_full_name' =>  $tutor_name,
 			'student_full_name' => implode(", ", $s),
 			'date' => $app_date,
@@ -2388,6 +2388,12 @@ function sb_appointment_submit_handler($form, &$form_state) {
 		    TRUE);
 	watchdog('eto_notifications',
 		 'Emailing confirmation to @tutor_name (@tutor_id)',
+		 array('@tutor_name' => $tutor->name,
+		       '@tutor_id' => $tutor->uid));
+      }
+      else {
+	watchdog('eto_notifications',
+		 'Failed to email confirmation to @tutor_name (@tutor_id)',
 		 array('@tutor_name' => $tutor->name,
 		       '@tutor_id' => $tutor->uid));
       }
@@ -2436,8 +2442,19 @@ function sb_appointment_submit_handler($form, &$form_state) {
             '@start_time' => $start_time,
             '@end_time' => $end_time,
           ));
-
       }
+      else {
+        watchdog('eto_notifications',
+          'Failed to email confirmation to @user_name (@user_id) for appointment on @date at @start_time - @end_time',
+          array(
+            '@user_name' => $name,
+            '@user_id' => $u->uid,
+            '@date' => $app_date,
+            '@start_time' => $start_time,
+            '@end_time' => $end_time,
+          ));
+      }
+
       if (can_email_parent($u)) {
         $name = $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
 	$messages[] = array('email' => $u->eto_profile->email_parent,
@@ -2447,6 +2464,14 @@ function sb_appointment_submit_handler($form, &$form_state) {
                       'end_time' => $end_time);
         watchdog('eto_notifications',
           'Emailing confirmation to parent of @user_name (@user_id)',
+          array(
+            '@user_name' => $name,
+            '@user_id' => $u->uid,
+          ));
+      }
+      else {
+        watchdog('eto_notifications',
+          'Failed to email confirmation to parent of @user_name (@user_id)',
           array(
             '@user_name' => $name,
             '@user_id' => $u->uid,
@@ -2486,7 +2511,17 @@ function sb_appointment_submit_handler($form, &$form_state) {
                 '@start_time' => $start_time,
                 '@end_time' => $end_time,
               ));
-
+          }
+          else {
+            watchdog('eto_notifications',
+              'Failed to email confirmation to @user_name (@user_id) for appointment on @date at @start_time - @end_time',
+              array(
+                '@user_name' => $name,
+                '@user_id' => $u->uid,
+                '@date' => $app_date,
+                '@start_time' => $start_time,
+                '@end_time' => $end_time,
+              ));
           }
           if (can_email_parent($u)) {
             $name = $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
@@ -2501,7 +2536,14 @@ function sb_appointment_submit_handler($form, &$form_state) {
                 '@user_name' => $name,
                 '@user_id' => $u->uid,
               ));
-
+          }
+          else {
+            watchdog('eto_notifications',
+              'Failed to email confirmation to parent of @user_name (@user_id)',
+              array(
+                '@user_name' => $name,
+                '@user_id' => $u->uid,
+              ));
           }
         }
       }
@@ -2950,7 +2992,7 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
     $tutor = eto_user_load($appointment->tutor_uid);
     $u = eto_user_load($appointment->student_uid_0);
 
-    if ($tutor->mail) {
+    if (can_email_tutor($tutor)) {
       $date = date_make_date($event->start_datetime_utc, "UTC");
       date_timezone_set($date, timezone_open(user_tz($tutor)));
       $app_date = date_format($date, DATE_FORMAT_ETO_LONG_NO_YEAR);
@@ -2962,14 +3004,13 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 
       // always email even if they asked for a text
       $messages[] = array('email' => $tutor->mail,
-			  'date' => $app_date,
-			  'start_time' => $start_time,
-			  'end_time' => $end_time);
+                    'date' => $app_date,
+                    'start_time' => $start_time,
+                    'end_time' => $end_time);
       watchdog('eto_notifications',
-	       'Emailing cancellation to @tutor_name (@tutor_id)',
-	       array('@tutor_name' => $tutor->name,
-		     '@tutor_id' => $tutor->uid));
-
+        'Emailing cancellation to @tutor_name (@tutor_id)',
+        array('@tutor_name' => $tutor->name,
+          '@tutor_id' => $tutor->uid));
 
       // then SMS if we asked for it and can
       $method = notifications_user_setting('send_method', $tutor);
@@ -2990,6 +3031,12 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 			  );
       }
     }
+    else {
+      watchdog('eto_notifications',
+        'Failed to email cancellation to @tutor_name (@tutor_id)',
+        array('@tutor_name' => $tutor->name,
+          '@tutor_id' => $tutor->uid));
+    }
 
     if ($appointment->appointment_type == TUTOR_SESSION) {
       $u = eto_user_load($appointment->student_uid_0);
@@ -3001,19 +3048,48 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
       date_timezone_set($end_date, timezone_open(user_tz($u)));
       $end_time = date_format($end_date, 'g:ia (T)');
 
-      if ($u->mail) {
+      if (can_email_student($u)) {
 	$messages[] = array('email' => $u->mail,
 			    'date' => $app_date,
 			    'start_time' => $start_time,
-			    'end_time' => $end_time);
+                      'end_time' => $end_time);
+        watchdog('eto_notifications',
+          'Emailing cancellation to @user_name (@user_id) for appointment on @date at @start_time - @end_time',
+          array(
+            '@user_name' => $u->name,
+            '@user_id' => $u->uid,
+            '@date' => $app_date,
+            '@start_time' => $start_time,
+            '@end_time' => $end_time,
+          ));
       }
-      if ( ($u->eto_profile->email_parent) && ($u->mail != $u->eto_profile->email_parent)) {
+      else {
+        watchdog('eto_notifications',
+          'Failed to email cancellation to @user_name (@user_id) for appointment on @date at @start_time - @end_time',
+          array(
+            '@user_name' => $u->name,
+            '@user_id' => $u->uid,
+            '@date' => $app_date,
+            '@start_time' => $start_time,
+            '@end_time' => $end_time,
+          ));
+      }
+      if (can_email_parent($u)) {
 	$messages[] = array('email' => $u->eto_profile->email_parent,
-			    'date' => $app_date,
-			    'start_time' => $start_time,
-			    'end_time' => $end_time);
+                      'date' => $app_date,
+                      'start_time' => $start_time,
+                      'end_time' => $end_time);
+        watchdog('eto_notifications',
+          'Emailed cancellation to parent of @u_name (@u_id)',
+          array('@u_name' => $u->name,
+            '@u_id' => $u->uid));
       }
-
+      else {
+        watchdog('eto_notifications',
+          'Failed to email cancellation to parent of @u_name (@u_id)',
+          array('@u_name' => $u->name,
+            '@u_id' => $u->uid));
+      }
 
     } else if ($appointment->appointment_type == GROUP_SESSION) {
 
@@ -3028,21 +3104,52 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 	  date_timezone_set($end_date, timezone_open(user_tz($u)));
 	  $end_time = date_format($end_date, 'g:ia (T)');
 
-	  if ($u->mail) {
+          if (can_email_student($u)) {
 	    $messages[] = array('email' => $u->mail,
-				'date' => $app_date,
-				'start_time' => $start_time,
-				'end_time' => $end_time);
+                          'date' => $app_date,
+                          'start_time' => $start_time,
+                          'end_time' => $end_time);
+            watchdog('eto_notifications',
+              'Emailing cancellation to @user_name (@user_id) for appointment on @date at @start_time - @end_time',
+              array(
+                '@user_name' => $u->name,
+                '@user_id' => $u->uid,
+                '@date' => $app_date,
+                '@start_time' => $start_time,
+                '@end_time' => $end_time,
+              ));
 	  }
-	  if ( ($u->eto_profile->email_parent) && ($u->mail != $u->eto_profile->email_parent)) {
+          else {
+            watchdog('eto_notifications',
+              'Failed to email cancellation to @user_name (@user_id) for appointment on @date at @start_time - @end_time',
+              array(
+                '@user_name' => $u->name,
+                '@user_id' => $u->uid,
+                '@date' => $app_date,
+                '@start_time' => $start_time,
+                '@end_time' => $end_time,
+              ));
+          }
+	  if (can_email_parent($u)) {
 	    $messages[] = array('email' => $u->eto_profile->email_parent,
-				'date' => $app_date,
-				'start_time' => $start_time,
-				'end_time' => $end_time);
+                          'date' => $app_date,
+                          'start_time' => $start_time,
+                          'end_time' => $end_time);
+            watchdog('eto_notifications',
+              'Emailed cancellation to parent of @u_name (@u_id)',
+              array('@u_name' => $u->name,
+                '@u_id' => $u->uid));
 	  }
+          else {
+            watchdog('eto_notifications',
+              'Failed to email cancellation to parent of @u_name (@u_id)',
+              array('@u_name' => $u->name,
+                '@u_id' => $u->uid));
+          }
 	}
       }
     }
+
     if (count($messages) > 0) {
       $tutor_name = ($tutor->eto_profile->first_name ? $tutor->eto_profile->first_name . " " . $tutor->eto_profile->last_name : $tutor->name);
       foreach ($messages as $m) {
