@@ -439,6 +439,7 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
             '',
             $action))
         . '</em></li>';
+      /*
       $output .= "<li><em>"
         . l(
           "$action_string this block and all sessions after it",
@@ -448,6 +449,7 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
             $event->schedule_event_id,
             'cancel-from'))
         . '</em></li>';
+      */
       $output .= '</ul>';
     }
 
