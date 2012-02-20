@@ -162,6 +162,13 @@ function sb_scheduler_menu() {
 				       'file' => 'schedule.pages.inc',
 				       'access arguments' => array('access content'),
 				       );
+  $items['user/calendar/%/cancel-from'] = array (
+				       'page callback' => 'sb_schedule_action',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array("", 2, 3),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('access content'),
+				       );
   $items['user/calendar/%/reinstate'] = array (
 				       'page callback' => 'sb_schedule_action',
 				       'type' => MENU_CALLBACK,
@@ -206,6 +213,13 @@ function sb_scheduler_menu() {
 				       'access arguments' => array('create schedule'),
 				       );
   $items['users/%/calendar/%/cancel'] = array (
+				       'page callback' => 'sb_schedule_action',
+				       'type' => MENU_CALLBACK,
+				       'page arguments' => array(1, 3, 4),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('access content'),
+				       );
+  $items['users/%/calendar/%/cancel-from'] = array (
 				       'page callback' => 'sb_schedule_action',
 				       'type' => MENU_CALLBACK,
 				       'page arguments' => array(1, 3, 4),

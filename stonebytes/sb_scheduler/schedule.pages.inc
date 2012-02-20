@@ -263,6 +263,8 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
     $target_user = eto_user_load(array('name' => $arg1));
     $arg = $arg2;
   }
+  $action = str_replace('-', '_', $action);
+
   $array = sb_parse_arg($arg);
 
   if ($array[1]) {
@@ -271,6 +273,7 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
   $id = $array[0];
   $action = strtolower(check_plain($action));
   $action_string = ucwords($action);
+  $action_string = str_replace('_', ' ', $action_string);
 
   if (!$id) {
     drupal_not_found();
@@ -315,7 +318,7 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
 
   // cannot cancel a canceled schedule block; cannot reinstate a non-canceled schedule block
   // since I'm always tempted to combine this: I can't, because a block can be canceled but the instance not
-  if ($action == "reinstate") {
+  if ($action == 'reinstate') {
     if ($instance) {
       if ($event->status_flag == 1) {
 	$reinstate_message = 1;
@@ -323,7 +326,7 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
     } else if ($schedule->status_flag == 1) {
       $reinstate_message = 1;
     }
-  } else if ($action == "cancel") {
+  } else if (($action == 'cancel') || ($action == 'cancel_from')) {
     if ($instance) {
       if ($event->status_flag == 0) {
 	$cancel_message = 1;
@@ -335,8 +338,8 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
 
   $output .= _schedule_tabs($target_user,
 			    $event->schedule_id,
-			    "",
-			    "cancel");
+			    '',
+			    'cancel');
 
 
   if ($reinstate_message) {
@@ -350,14 +353,19 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
   }
 
   // we're either canceling, or reinstating
-  $title = ucwords($action) . " Schedule " . ucwords($noun);
+  if ($action == 'cancel_from') {
+    $title = 'Cancel sessions after a date';
+  }
+  else {
+    $title = $action_string . " Schedule " . ucwords($noun);
+  }
   drupal_set_title($title);
   $output .= "<h2>$title</h2>\n";
 
-  if (($instance != "") && ($action == 'cancel')) {
-    $output .= "<p><em>Did you want to $action all future sessions in this schedule series?<br>If so, click here instead: <strong>" .
-      l("$action_string all future schedule blocks in this series",
-	schedule_url(sb_user_base($target_user) . "/", $id, "", $action)) . "</strong></em></p>";
+  if (($instance != "")
+    && (($action == 'cancel')
+      || ($action == 'cancel_from'))) {
+    1; //fixme, rewrite this if statement
   } else {
     $event = $schedule;
   }
@@ -373,7 +381,12 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
   } else {
 
     if ($noun == "series") {
-      $output .= "<h2>$action_string future occurences of schedule " . $noun. " $date_string</h2>";
+      if ($action == "cancel_from") {
+        $output .= "<h2>Cancel session $date_string and all future sessions</h2>";
+      }
+      else {
+        $output .= "<h2>$action_string all sessions after today for schedule " . $noun. " $date_string</h2>";
+      }
       if ($action == 'cancel') {
         $now = date_make_date(time(), "UTC");
         $from_date = date_format($now, DATE_FORMAT_DATETIME);
@@ -414,6 +427,30 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
     }
 
     $output .= drupal_get_form('sb_' . $action . '_schedule_form', $event);
+
+    if (($instance != "") && ($action == 'cancel')) {
+      $output .= "<p><em>Other action options:</em></p>\n";
+      $output .= "<ul><li><em>"
+        . l(
+          "$action_string all schedule blocks in this series",
+          schedule_url(
+            sb_user_base($target_user) . "/",
+            $id,
+            '',
+            $action))
+        . '</em></li>';
+      $output .= "<li><em>"
+        . l(
+          "$action_string this block and all sessions after it",
+          schedule_url(
+            sb_user_base($target_user) . '/',
+            $event->schedule_id,
+            $event->schedule_event_id,
+            'cancel-from'))
+        . '</em></li>';
+      $output .= '</ul>';
+    }
+
     if (! $instance) {
       // see if they want to instead cancel a specific instance
       $output .= "<h2>Did you want to just cancel one instance?</h2>";
@@ -1290,7 +1327,7 @@ function validate_time($time) {
     return ""; // success
   }
   else {
-    return "Time must be formatted like 9:00am";
+    return "Time must be formatted like '9:00am' or '12:30pm'";
   }
 }
 
@@ -2160,12 +2197,17 @@ function sb_appointment_validate($form, &$form_state) {
   // if we have a start_time set, it means we're setting a free-form appointment.
   // the start_time will be in the users timezone. we also have a UTC date in start_datetime_utc
   if (isset($form_state['values']['start_time'])) {
-    $date = explode(' ', $form_state['values']['start_datetime_utc']);
-    $date = $date[0] . ' ' . sb_date_extract($form_state['values']['start_time'], 'time');
-    $date = date_create($date);
-    date_timezone_set($date, timezone_open('UTC'));
-
-    $form_state['values']['start_datetime_utc'] = date_format($date, DATE_FORMAT_DATETIME);
+    $err = validate_time($form_state['values']['start_time']);
+    if ($err) {
+      form_set_error('start_time', $err);
+    }
+    else {
+      $date = explode(' ', $form_state['values']['start_datetime_utc']);
+      $date = $date[0] . ' ' . sb_date_extract($form_state['values']['start_time'], 'time');
+      $date = date_create($date);
+      date_timezone_set($date, timezone_open('UTC'));
+      $form_state['values']['start_datetime_utc'] = date_format($date, DATE_FORMAT_DATETIME);
+    }
     $verify_block = FALSE;
   }
   else {
@@ -2331,7 +2373,7 @@ function sb_appointment_submit_handler($form, &$form_state) {
 
 
       // always email
-      if (preg_match(EMAIL_REGEX, $tutor->mail) === 1) {
+      if (can_email_tutor($u)) {
 	$params = array('tutor_full_name' =>  $tutor_name,
 			'student_full_name' => implode(", ", $s),
 			'date' => $app_date,
@@ -2345,11 +2387,10 @@ function sb_appointment_submit_handler($form, &$form_state) {
 		    variable_get('site_mail', 'admin@elitetutorsonline.com'),
 		    TRUE);
 	watchdog('eto_notifications',
-		 'Emailing contirmation to @tutor_name (@tutor_id)',
+		 'Emailing confirmation to @tutor_name (@tutor_id)',
 		 array('@tutor_name' => $tutor->name,
 		       '@tutor_id' => $tutor->uid));
       }
-
 
       // then SMS if we asked for it and can
       $method = notifications_user_setting('send_method', $tutor);
@@ -2379,31 +2420,37 @@ function sb_appointment_submit_handler($form, &$form_state) {
       date_timezone_set($end_date, timezone_open(user_tz($u)));
       $end_time = date_format($end_date, 'g:ia (T)');
 
-      // see if we want to be notified via text
-      /*
-      if ($u->profile_notify_with == "Text Message") {
-	if ( ($u->sms_user[0]['number'] > 0) && ($u->sms_user[0]['status'] == 2) ) {
-	  $texts[] = array ('uid' => $u->uid,
-			    'message' => "Tutoring $app_date $start_time - $end_time " . $tutor_name,
-			    );
-	}
-
-      } else if ($u->mail) {
-      */
-
-      if ($u->mail) {
+      if (can_email_student($u)) {
+        $name = $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
 	$messages[] = array('email' => $u->mail,
-			    'name' => $u->eto_profile->first_name . " " . $u->eto_profile->last_name,
-			    'date' => $app_date,
-			    'start_time' => $start_time,
-			    'end_time' => $end_time);
+                      'name' => $name,
+                      'date' => $app_date,
+                      'start_time' => $start_time,
+                      'end_time' => $end_time);
+        watchdog('eto_notifications',
+          'Emailing confirmation to @user_name (@user_id) for appointment on @date at @start_time - @end_time',
+          array(
+            '@user_name' => $name,
+            '@user_id' => $u->uid,
+            '@date' => $app_date,
+            '@start_time' => $start_time,
+            '@end_time' => $end_time,
+          ));
+
       }
-      if ( ($u->eto_profile->email_parent) && ($u->mail != $u->eto_profile->email_parent)) {
+      if (can_email_parent($u)) {
+        $name = $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
 	$messages[] = array('email' => $u->eto_profile->email_parent,
-			    'name' => $u->eto_profile->first_name . " " . $u->eto_profile->last_name,
-			    'date' => $app_date,
-			    'start_time' => $start_time,
-			    'end_time' => $end_time);
+                      'name' => $name,
+                      'date' => $app_date,
+                      'start_time' => $start_time,
+                      'end_time' => $end_time);
+        watchdog('eto_notifications',
+          'Emailing confirmation to parent of @user_name (@user_id)',
+          array(
+            '@user_name' => $name,
+            '@user_id' => $u->uid,
+          ));
       }
 
 
@@ -2423,32 +2470,40 @@ function sb_appointment_submit_handler($form, &$form_state) {
 	  date_timezone_set($end_date, timezone_open(user_tz($u)));
 	  $end_time = date_format($end_date, 'g:ia (T)');
 
-	  // see if we want to be notified via text
-	  /*
-	  if ($u->profile_notify_with == "Text Message") {
-	    if ( ($u->sms_user[0]['number'] > 0) && ($u->sms_user[0]['status'] == 2) ) {
-	      $texts[] = array ('uid' => $u->uid,
-				'message' => "Tutoring $app_date $start_time - $end_time " . $tutor_name,
-				);
-	    }
+	  if (can_email_student($u)) {
+            $name = $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
+            $messages[] = array('email' => $u->mail,
+                          'name' => $name,
+                          'date' => $app_date,
+                          'start_time' => $start_time,
+                          'end_time' => $end_time);
+            watchdog('eto_notifications',
+              'Emailing confirmation to @user_name (@user_id) for appointment on @date at @start_time - @end_time',
+              array(
+                '@user_name' => $name,
+                '@user_id' => $u->uid,
+                '@date' => $app_date,
+                '@start_time' => $start_time,
+                '@end_time' => $end_time,
+              ));
 
-	  } else if ($u->mail) {
-*/
-	  if ($u->mail) {
-	    $messages[] = array('email' => $u->mail,
-				'name' => $u->eto_profile->first_name . " " . $u->eto_profile->last_name,
-				'date' => $app_date,
-				'start_time' => $start_time,
-				'end_time' => $end_time);
-	  }
-	  if ( ($u->eto_profile->email_parent) && ($u->mail != $u->eto_profile->email_parent)) {
-	    $messages[] = array('email' => $u->eto_profile->email_parent,
-				'name' => $u->eto_profile->first_name . " " . $u->eto_profile->last_name,
-				'date' => $app_date,
-				'start_time' => $start_time,
-				'end_time' => $end_time);
-	  }
-	}
+          }
+          if (can_email_parent($u)) {
+            $name = $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
+            $messages[] = array('email' => $u->eto_profile->email_parent,
+                          'name' => $name,
+                          'date' => $app_date,
+                          'start_time' => $start_time,
+                          'end_time' => $end_time);
+            watchdog('eto_notifications',
+              'Emailing confirmation to parent of @user_name (@user_id)',
+              array(
+                '@user_name' => $name,
+                '@user_id' => $u->uid,
+              ));
+
+          }
+        }
       }
     }
 
