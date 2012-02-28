@@ -352,16 +352,6 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
     $replacement_form_message = l("Click here to reinstate.", $reinstate_link);
   }
 
-  // we're either canceling, or reinstating
-  if ($action == 'cancel_from') {
-    $title = 'Cancel sessions after a date';
-  }
-  else {
-    $title = $action_string . " Schedule " . ucwords($noun);
-  }
-  drupal_set_title($title);
-  $output .= "<h2>$title</h2>\n";
-
   if (($instance != "")
     && (($action == 'cancel')
       || ($action == 'cancel_from'))) {
@@ -372,6 +362,18 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
 
   $date = date_make_date($event->start_datetime_utc, "UTC");
   date_timezone_set($date, timezone_open(user_tz()));
+
+
+  // we're either canceling, or reinstating
+  if ($action == 'cancel_from') {
+    $title = 'Cancel sessions after ' . date_format($date, DATE_FORMAT_ETO_LONG);
+  }
+  else {
+    $title = $action_string . " Schedule " . ucwords($noun);
+  }
+  drupal_set_title($title);
+  $output .= "<h2>$title</h2>\n";
+
   $date_string = "on " . date_format($date, DATE_FORMAT_ETO_LONG) . " at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
 
   if ($replacement_form_message) {
@@ -382,7 +384,7 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
 
     if ($noun == "series") {
       if ($action == "cancel_from") {
-        $output .= "<h2>Cancel session $date_string and all future sessions</h2>";
+        $output .= "<h2>Cancel sessions $date_string and later</h2>";
       }
       else {
         $output .= "<h2>$action_string all sessions after today for schedule " . $noun. " $date_string</h2>";
@@ -401,7 +403,12 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
 
     }
     else {
-      $output .= "<h2>$action_string schedule " . $noun. " $date_string</h2>";
+      if ($action == "cancel_from") {
+        $output .= "<h2>Cancel schedule blocks $date_string and later</h2>";
+      }
+      else {
+	$output .= "<h2>$action_string schedule " . $noun. " $date_string</h2>";
+      }
     }
 
     if ($action == "reinstate") {
@@ -429,7 +436,7 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
     $output .= drupal_get_form('sb_' . $action . '_schedule_form', $event);
 
     if (($instance != "") && ($action == 'cancel')) {
-      $output .= "<p><em>Other action options:</em></p>\n";
+      $output .= "<p><em>Other possible choices:</em></p>\n";
       $output .= "<ul><li><em>"
         . l(
           "$action_string all schedule blocks in this series",
@@ -439,17 +446,17 @@ function sb_schedule_action ($arg1, $arg2, $action = "") {
             '',
             $action))
         . '</em></li>';
-      /*
-      $output .= "<li><em>"
-        . l(
-          "$action_string this block and all sessions after it",
-          schedule_url(
-            sb_user_base($target_user) . '/',
-            $event->schedule_id,
-            $event->schedule_event_id,
-            'cancel-from'))
-        . '</em></li>';
-      */
+      if ($action != 'cancel_from') {
+	$output .= "<li><em>"
+	  . l(
+	      "$action_string this block and all blocks after it",
+	      schedule_url(
+			   sb_user_base($target_user) . '/',
+			   $event->schedule_id,
+			   $event->schedule_event_id,
+			   'cancel-from'))
+	  . '</em></li>';
+      }
       $output .= '</ul>';
     }
 
@@ -515,14 +522,69 @@ function sb_cancel_schedule_form (&$form_state, $node) {
   return $form;
 }
 
-function sb_cancel_schedule_submit_handler($form, &$form_state) {
 
-  if ($form_state['values']['schedule_event_id']) {
+/** special form to cancel from a particular date **/
+
+function sb_cancel_from_schedule_form (&$form_state, $node) {
+  $form = array();
+
+  global $user;
+
+  $app = sb_schedule_load($node->schedule_id);
+
+  if ($node->schedule_event_id) {
+    // we're an schedule event
+    $form['schedule_event_id'] = array(
+      '#type' => 'hidden',
+      '#value' => $node->schedule_event_id
+    );
+    $noun = "block";
+  } else {
+    $noun = "series";
+  }
+
+  $form['schedule_id'] = array(
+    '#type' => 'hidden',
+    '#value' => $node->schedule_id
+  );
+  $form['uid'] = array(
+    '#type' => 'hidden',
+    '#value' => $node->uid,
+  );
+
+  $form['cancel_from'] = array(
+    '#type' => 'hidden',
+    '#value' => '1',
+  );
+
+  $form['submit'] = array (
+    '#type' => 'submit',
+    '#value' => 'Yes, cancel this schedule ' . $noun . ' and all blocks after it',
+  );
+
+  $form['#submit'] = array('sb_cancel_schedule_submit_handler');
+
+  return $form;
+}
+
+function sb_cancel_schedule_submit_handler($form, &$form_state) {
+  if (isset($form_state['values']['cancel_from'])) {
+    // cancel from a particular date
+    $event = sb_schedule_event_load(array('schedule_event_id' => $form_state['values']['schedule_event_id']));
+    $date = date_make_date($event->start_datetime_utc, "UTC");
+    $from_date = date_format($date, DATE_FORMAT_DATETIME);  // it was probably already in datetime, but just in case
+
+    $existing_appointments = sb_appointment_by_schedule_id_load(array(
+                               'id' => $form_state['values']['schedule_id'],
+                               'from_date' => $from_date));
+  }
+  else if ($form_state['values']['schedule_event_id']) {
     $event = sb_schedule_event_load(array('schedule_event_id' => $form_state['values']['schedule_event_id']));
     $existing_appointments = sb_appointment_by_schedule_id_load(array(
                                'id' => $form_state['values']['schedule_id'],
                                'event' => $event));
-  } else {
+  }
+  else {
     $now = date_make_date(time(), "UTC");
     $from_date = date_format($now, DATE_FORMAT_DATETIME);
 
@@ -538,10 +600,14 @@ function sb_cancel_schedule_submit_handler($form, &$form_state) {
     }
   }
 
-  if ($form_state['values']['schedule_event_id']) {
+  if (isset($form_state['values']['cancel_from'])) {
+    sb_schedule_cancel($form_state['values']['schedule_id'], $from_date);
+  }
+  else if ($form_state['values']['schedule_event_id']) {
     sb_schedule_event_cancel($form_state['values']['schedule_event_id']);
-  } else {
-    sb_schedule_cancel($form_state['values']['schedule_id']);
+  }
+  else {
+    sb_schedule_cancel($form_state['values']['schedule_id'], $from_date);
   }
 
   $return = l("Return to your calendar",
@@ -553,15 +619,12 @@ function sb_cancel_schedule_submit_handler($form, &$form_state) {
 					 "cancel");
 }
 
-function sb_schedule_cancel ($schedule_id) {
+function sb_schedule_cancel ($schedule_id, $from_date) {
   // we used to mark the schedule as cancelled. now just cancel the individual 'future events'
   /*
   db_query('UPDATE {sb_schedule} SET status_flag = 0 WHERE schedule_id = %d',
 	   $schedule_id);
   */
-  $now = date_make_date(time(), "UTC");
-  $from_date = date_format($now, DATE_FORMAT_DATETIME);
-
   $events = sb_schedule_event_load(array(
               'schedule_id' => $schedule_id,
               'from_date' => $from_date));
@@ -745,6 +808,7 @@ function callback_user_calendar_fetch ($target_date = "", $target_user = "", $re
 
   $target_date = $d[2] . "-" . $d[0] . "-" . $d[1] . " 00:00:00";
   $target_date = date_make_date($target_date, user_tz());
+
   $tz_string = date_format($target_date, "T");
 
   $events = sb_appointment_uid_load($target_user->uid, $db_date_start, $db_date_end);
@@ -757,6 +821,7 @@ function callback_user_calendar_fetch ($target_date = "", $target_user = "", $re
     $v = sb_schedule_load($vacation[0]->schedule_id);
     $start = date_make_date($v->start_datetime_utc, "UTC");
     date_timezone_set($start, timezone_open(user_tz()));
+
     $interval = "P" . ($v->repeat_count - 1) . "D";
     $interval = new DateInterval($interval);
     $end = date_make_date($v->start_datetime_utc, "UTC"); // works off the start date to reduce TZ issues
@@ -791,8 +856,12 @@ function callback_user_calendar_fetch ($target_date = "", $target_user = "", $re
       foreach ($events as $event) {
 	$start = date_make_date($event->start_datetime_utc, "UTC");
 	date_timezone_set($start, timezone_open($tz_string));
+	//	$start = _dst($start);
+
 	$end = date_make_date($event->end_datetime_utc, "UTC");
 	date_timezone_set($end, timezone_open($tz_string));
+	//	$end = _dst($end);
+
 	$event_details = sb_appointment_load(array('appointment_id' => $event->appointment_id));
 	$participants = sb_appointment_participants_load_pretty($event->appointment_id);
 	$tutor = theme('eto_user', eto_user_load($event->tutor_uid), TRUE);
@@ -2732,6 +2801,7 @@ function user_schedule_appointment_action($arg, $action) {
   }
   $id = $array[0];
   $action = strtolower(check_plain($action));
+  $action = str_replace('-', '_', $action);
   $action_string = ucwords($action);
 
   if (! $id) {
@@ -2762,7 +2832,7 @@ function user_schedule_appointment_action($arg, $action) {
     } else if ($appointment->status_flag == 1) {
       return "You cannot reinstate an appointment that isn't canceled.";
     }
-  } else if ($action == "cancel") {
+  } else if (($action == "cancel") || ($action == 'cancel_from')) {
     if ($instance) {
       if ($event->status_flag == 0) {
 	return "You cannot cancel an appointment that is already canceled.";
@@ -2794,7 +2864,22 @@ function user_schedule_appointment_action($arg, $action) {
   global $user;
 
   if (user_access('view all appointments') || isa_participant($id, $user->uid))  {
-    $title = $action_string . " appointment";
+
+    if ($instance == "") {
+      $event = $appointment;
+      $noun = " series";
+      $action_string = "Cancel all future appointments in the";
+    }
+
+    $date = date_make_date($event->start_datetime_utc, "UTC");
+    date_timezone_set($date, timezone_open(user_tz()));
+
+    if ($action == 'cancel_from') {
+      $title = 'Cancel appointments after ' . date_format($date, DATE_FORMAT_ETO_LONG);
+    }
+    else {
+      $title = $action_string . " appointment";
+    }
     drupal_set_title($title);
     $output .= "<h2>$title</h2>\n";
 
@@ -2808,23 +2893,46 @@ function user_schedule_appointment_action($arg, $action) {
 	|| ( ($appointment->appointment_type == TUTOR_SESSION) && (isa_participant($id, $user->uid)) )
 	|| ( ($appointment->appointment_type == GROUP_SESSION) && ($appointment->tutor_uid == $user->uid) ) ) {
       if ($instance != "") {
-	$output .= "<p><em>Did you want to $action all future sessions in this appointment series?<br>If so, click here instead: <strong>" .
-	  l("$action_string all future sessions in this series",
-	    appointment_url("", $id, "", $action)) . "</strong></em></p>";
-      } else {
-	$event = $appointment;
-	$noun = " series";
-        $action_string = "Cancel all future appointments in the";
+	$short_date = date_format($date, DATE_FORMAT_ETO_ABBREVIATED);
+	if ($action == "cancel_from") {
+	  $s = "cancel";
+	}
+	else {
+	  $s = $action;
+	}
+	$output .= '<p>';
+	$output .= "<em>Did you want to $s all sessions after today in this appointment series?<br>If so, click here instead: <strong>" .
+	  l("$s all future sessions in this series after today",
+	    appointment_url("", $id, "", $action)) . "</strong></em><br>";
+	if ($action != 'cancel_from') {
+	  $output .= "<em>Did you want to $s all sessions in this appointment series on or after $short_date?<br>If so, click here instead: <strong>" .
+	    l("$s all future sessions in this series on or after $short_date",
+	      appointment_url("", $event->appointment_id, $event->appointment_event_id, $action . '-from')) . "</strong></em>";
+	}
+	$output .= '</p>';
       }
     }
 
-    $date = date_make_date($event->start_datetime_utc, "UTC");
-    date_timezone_set($date, timezone_open(user_tz()));
     $date_string = "on " . date_format($date, DATE_FORMAT_ETO_LONG) . " at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
 
-    $output .= "<h2>$action_string appointment " . $noun. " <em>'" . $appointment->title . "'</em> $date_string</h2>";
+    if ($action == "cancel_from") {
+      $output .= "<h2>Cancel appointments on " . date_format($date, DATE_FORMAT_ETO_ABBREVIATED) . ' and later for <em>' . $appointment->title . '</em></h2>.';
+    }
+    else {
+      $output .= "<h2>$action_string appointment " . $noun. " <em>'" . $appointment->title . "'</em> $date_string</h2>";
+    }
 
-    if (($action == "cancel") && ($instance == "")) {
+    if ($action == "cancel_from") {
+      $from_date = $event->start_datetime_utc;
+      $cancel_count = count(sb_appointment_event_load(array(
+                          'appointment_id' => $event->appointment_id,
+                          'from_date' => $from_date)));
+      $total_count = count(sb_appointment_event_load(array(
+                         'appointment_id' => $event->appointment_id
+                       )));
+      $output .= "This will cancel $cancel_count of the $total_count events in the series.";
+    }
+    else if (($action == "cancel") && ($instance == "")) {
       $now = date_make_date(time(), "UTC");
       $from_date = date_format($now, DATE_FORMAT_DATETIME);
       $cancel_count = count(sb_appointment_event_load(array(
@@ -2933,6 +3041,78 @@ function sb_cancel_appointment_form (&$form_state, $node) {
 }
 
 
+/** special form for cancel_from **/
+function sb_cancel_from_appointment_form (&$form_state, $node) {
+  $form = array();
+
+  global $user;
+
+  $app = sb_appointment_load($node->appointment_id);
+
+  if ((isa_participant($node->appointment_id, $user->uid) && (! user_access('view all appointments')) )) {
+    // if we're a participant and not an admin, just silently encode our uid.
+    $form['canceling_user'] = array (
+			  '#type' => 'hidden',
+			  '#value' => $user->name,
+			  );
+  } else {
+    // otherwise, we need to be able to select who is doing the canceling
+    $tutor = eto_user_load($app->tutor_uid);
+    $options[$tutor->name] = $tutor->name . " (tutor)";
+    if ($app->appointment_type == TUTOR_SESSION) {
+      $options[$app->student_0] = $app->student_0 . " (student)";
+    } else {
+      $participants = sb_appointment_participants_load($app->appointment_id, "names");
+      foreach ($participants as $p) {
+	$options[$p] = $p . " (student)";
+      }
+    }
+    $form['canceling_user'] = array (
+			  '#type' => 'radios',
+			  '#title' => 'Select who is canceling',
+			  '#options' => $options,
+			  );
+  }
+
+  if ( ($node->appointment_event_id) || ($node->repeat_count == 1) ) {
+    // we're an appointment event or a series of 1
+    $noun = "";
+    $form['appointment_event_id'] = array(
+					  '#type' => 'hidden',
+					  '#value' => $node->appointment_event_id
+					  );
+  } else {
+    $noun = "series";
+  }
+  $form['appointment_id'] = array(
+					'#type' => 'hidden',
+					'#value' => $node->appointment_id
+					);
+
+  $form['body'] = array(
+			'#type' => 'textfield',
+			'#default_value' => $node->body,
+			'#title' => 'Reason for canceling (optional)',
+			'#size' => 120,
+			'#maxlength' => 255,
+			);
+
+  $form['cancel_from'] = array(
+    '#type' => 'hidden',
+    '#value' => '1',
+  );
+
+  $form['submit'] = array (
+    '#type' => 'submit',
+    '#value' => 'Yes, cancel this appointment ' . $noun . ' and all appointments after it',
+  );
+
+  $form['#submit'] = array('sb_cancel_appointment_submit_handler');
+
+  return $form;
+}
+
+
 
 function sb_cancel_appointment_submit_handler($form, &$form_state) {
   //
@@ -2953,7 +3133,33 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
   if ( ($appointment->appointment_type == TUTOR_SESSION)
        || ( ($appointment->appointment_type == GROUP_SESSION)
 	    && ($appointment->tutor_uid == $form_state['values']['canceling_uid'] ) ) ) {
-    if ($form_state['values']['appointment_event_id']) {
+
+    if (isset($form_state['values']['cancel_from'])) {
+
+      $event = sb_appointment_event_load(array(
+                 'appointment_event_id' => $form_state['values']['appointment_event_id']));
+      $from_date = $event->start_datetime_utc;
+      $events = sb_appointment_event_load(array(
+                  'appointment_id' => $form_state['values']['appointment_id'],
+                  'from_date' => $from_date));
+      $event = $events[0]; // this is the "cancelled" event
+
+      // if they only had one appointment remaining, let's pretend they
+      // only cancelled one appointment instead of the series
+      if (count($events) == 1) {
+        $isa_series = 0;
+      }
+      else {
+	$isa_series = 1;
+      }
+
+      sb_appointment_cancel($form_state['values']['appointment_id'], $from_date);
+
+      $date = date_make_date($event->start_datetime_utc, "UTC");
+      date_timezone_set($date, timezone_open(user_tz()));
+      $date_string = "on " . date_format($date, "l") . "s at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
+    }
+    else if ($form_state['values']['appointment_event_id']) {
 
       $isa_series = 0;
 
@@ -2965,23 +3171,23 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
       date_timezone_set($date, timezone_open(user_tz()));
       $date_string = "on " . date_format($date, DATE_FORMAT_ETO_LONG) . " at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
     } else {
-      $isa_series = 1;
-
-      // for our "event", use the first cancelled one in a series
       $now = date_make_date(time(), "UTC");
       $from_date = date_format($now, DATE_FORMAT_DATETIME);
       $events = sb_appointment_event_load(array(
                   'appointment_id' => $form_state['values']['appointment_id'],
                   'from_date' => $from_date));
-      $event = $events[0];
+      $event = $events[0];       // for our "event", use the first cancelled one in a series
 
       // if they only had one appointment remaining, let's pretend they
       // only cancelled one appointment instead of the series
       if (count($events) == 1) {
         $isa_series = 0;
       }
+      else {
+	$isa_series = 1;
+      }
 
-      sb_appointment_cancel($form_state['values']['appointment_id']);
+      sb_appointment_cancel($form_state['values']['appointment_id'], $from_date);
 
       $date = date_make_date($event->start_datetime_utc, "UTC");
       date_timezone_set($date, timezone_open(user_tz()));
@@ -3191,7 +3397,20 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
 
   } else {
 
-    if ($form_state['values']['appointment_event_id']) {
+    // FIXME -- ad cancel-from stuff here too
+
+    if (isset($form_state['values']['cancel_from'])) {
+      $event = sb_appointment_event_load(array(
+                 'appointment_event_id' => $form_state['values']['appointment_event_id']));
+      $from_date = $event->start_datetime_utc;
+
+      sb_appointment_cancel($form_state['values']['appointment_id'], $from_date);
+
+      $date = date_make_date($event->start_datetime_utc, "UTC");
+      date_timezone_set($date, timezone_open(user_tz()));
+      $date_string = "on " . date_format($date, "l") . "s at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
+    }
+    else if ($form_state['values']['appointment_event_id']) {
       $event = sb_appointment_event_load(array(
                  'appointment_event_id' => $form_state['values']['appointment_event_id']));
       sb_appointment_event_cancel($form_state['values']['appointment_event_id']);
@@ -3199,9 +3418,15 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
       $date = date_make_date($event->start_datetime_utc, "UTC");
       date_timezone_set($date, timezone_open(user_tz()));
       $date_string = "on " . date_format($date, DATE_FORMAT_ETO_LONG) . " at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
-    } else {
+    }
+    else {
       $event = $appointment;
-      sb_appointment_cancel($form_state['values']['appointment_id']);
+
+      $now = date_make_date(time(), "UTC");
+      $from_date = date_format($now, DATE_FORMAT_DATETIME);
+
+      sb_appointment_cancel($form_state['values']['appointment_id'], $from_date);
+
       $date = date_make_date($event->start_datetime_utc, "UTC");
       date_timezone_set($date, timezone_open(user_tz()));
       $date_string = "on " . date_format($date, "l") . "s at " . date_format($date, TIME_FORMAT_ETO_STANDARD);
@@ -3212,15 +3437,12 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
   $form_state['redirect'] = appointment_url("", $form_state['values']['appointment_id'], $form_state['values']['appointment_event_id']);
 }
 
-function sb_appointment_cancel ($appointment_id) {
+function sb_appointment_cancel ($appointment_id, $from_date) {
   // we used to mark the schedule as cancelled. now just cancel the individual 'future events'
   /*
   db_query('UPDATE {sb_appointment} SET status_flag = 0 WHERE appointment_id = %d',
 	   $appointment_id);
   */
-  $now = date_make_date(time(), "UTC");
-  $from_date = date_format($now, DATE_FORMAT_DATETIME);
-
   $events = sb_appointment_event_load(array(
               'appointment_id' => $appointment_id,
               'from_date' => $from_date));

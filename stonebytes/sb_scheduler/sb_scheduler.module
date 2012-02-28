@@ -271,6 +271,14 @@ function sb_scheduler_menu() {
 					 'file' => 'schedule.pages.inc',
 					 'access arguments' => array('access content'),
 					 );
+  $items['appointments/%/cancel-from'] = array (
+					 'title' => 'Cancel Appointment',
+					 'page callback' => 'user_schedule_appointment_action',
+					 'page arguments' => array(1, 2),
+					 'type' => MENU_CALLBACK,
+					 'file' => 'schedule.pages.inc',
+					 'access arguments' => array('access content'),
+					 );
   $items['appointments/%/reinstate'] = array (
 					 'title' => 'Reinstate Appointment',
 					 'page callback' => 'user_schedule_appointment_action',
