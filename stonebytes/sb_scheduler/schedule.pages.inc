@@ -1759,7 +1759,11 @@ function theme_appointment_details ($appointment, $first, $last, $event) {
       $output .= "<br><span>Canceled in error? " . l('Reinstate this appointment series.', "appointments/" . sb_encode($appointment->appointment_id) . "/reinstate") . "</span>";
     }
   } else if (user_access('view all appointments') || ($appointment->tutor_uid == $user->uid)) {
-    $output .= "<br><span class='canceled'>" . l('Cancel all future appointments in this series.', "appointments/" . sb_encode($appointment->appointment_id) . "/cancel") . "</span>";
+    $event_date = date_make_date($event->start_datetime_utc, "UTC");
+    date_timezone_set($event_date, timezone_open(user_tz()));
+    $short_date = date_format($event_date, DATE_FORMAT_ETO_ABBREVIATED);
+    $output .= "<br><span class='canceled'>" . l('* Cancel all appointments in this series after today.', appointment_url("", $appointment->appointment_id, "", "cancel")) . "</span>";
+    $output .= "<br><span class='canceled'>" . l("* Cancel all future appointments on or after $short_date.", appointment_url("", $event->appointment_id, $event->appointment_event_id, "cancel-from")) . "</span>";
   }
 
   if ($event) {
