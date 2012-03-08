@@ -817,6 +817,13 @@ function callback_user_calendar_fetch ($target_date = "", $target_user = "", $re
 
   $output .= "<p>" . date_format($target_date, "l M jS, Y") . "$today:</p>\n";
 
+  if (user_access("is a tutor", $target_user) &&
+    (($target_user->uid == $user->uid) || (user_access("administer the site"))) ) {
+
+    $url = 'users/' . $target_user->name . '/schedule/appointment/' . sb_encode(date_format($target_date, DATE_FORMAT_DATETIME));
+    $output .= '<p>' . l('Click here to schedule an appointment with a student.', $url) . '</p>';
+  }
+
   if ($vacation) {
     $v = sb_schedule_load($vacation[0]->schedule_id);
     $start = date_make_date($v->start_datetime_utc, "UTC");
