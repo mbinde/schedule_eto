@@ -3668,6 +3668,9 @@ function user_upcoming_appointment_display_block($account) {
   } else {
     $output .= "<ul>";
     foreach ($appointments as $a) {
+
+      $participants = sb_appointment_participants_load($a->appointment_id);
+
       $start = date_make_date($a->start_datetime_utc, "UTC");
       date_timezone_set($start, timezone_open(user_tz($account)));
       $end = date_make_date($a->end_datetime_utc, "UTC");
@@ -3675,10 +3678,18 @@ function user_upcoming_appointment_display_block($account) {
 
       $start_string = date_format($start, DATE_FORMAT_ETO_LONG_NO_YEAR) . " at " . date_format($start, TIME_FORMAT_ETO_STANDARD);
       $end_string = date_format($end, TIME_FORMAT_ETO_STANDARD);
-      $tutor = eto_user_load($a->tutor_uid);
+
+      if (user_access("is a tutor", $account)) {
+        $student = eto_user_load($participants[0]);
+        $name = theme('eto_user', $student, TRUE);
+      }
+      else {
+        $tutor = eto_user_load($a->tutor_uid);
+        $name = theme('eto_user', $tutor, TRUE);
+      }
 
       $output .= "<li>" ;
-      $output .= $start_string . ": tutor session with " . theme('eto_user', $tutor, TRUE) . " until " . $end_string ;
+      $output .= "$start_string: tutor session with $name until $end_string";
       $output .= ' <span class="cancel-this">' . l('[cancel]', appointment_url("", $a->appointment_id, $a->appointment_event_id, 'cancel')) . '</span>';
       $output .= "</li>";
 
