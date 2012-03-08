@@ -2905,6 +2905,7 @@ function user_schedule_appointment_action($arg, $action) {
 	  $s = $action;
 	}
 	$output .= '<p>';
+	/*
 	$output .= "<em>Did you want to $s all sessions after today in this appointment series?<br>If so, click here instead: <strong>" .
 	  l("$s all future sessions in this series after today",
 	    appointment_url("", $id, "", $action)) . "</strong></em><br>";
@@ -2912,6 +2913,13 @@ function user_schedule_appointment_action($arg, $action) {
 	  $output .= "<em>Did you want to $s all sessions in this appointment series on or after $short_date?<br>If so, click here instead: <strong>" .
 	    l("$s all future sessions in this series on or after $short_date",
 	      appointment_url("", $event->appointment_id, $event->appointment_event_id, $action . '-from')) . "</strong></em>";
+	}
+	*/
+	$output .= '* <em>' . l("Click here instead to $s all future sessions in this series after today",
+                   appointment_url('', $id, '', $action)) . '</em><br>';
+	if ($action != 'cancel_from') {
+	  $output .= '* <em>' . l("Click here instead to $s all future sessions in this series on or after $short_date",
+                     appointment_url('', $event->appointment_id, $event->appointment_event_id, $action . '-from')) . '</em>';
 	}
 	$output .= '</p>';
       }
@@ -3669,7 +3677,10 @@ function user_upcoming_appointment_display_block($account) {
       $end_string = date_format($end, TIME_FORMAT_ETO_STANDARD);
       $tutor = eto_user_load($a->tutor_uid);
 
-      $output .= "<li>" . $start_string . ": tutor session with " . theme('eto_user', $tutor, TRUE) . " until " . $end_string . "</li>";
+      $output .= "<li>" ;
+      $output .= $start_string . ": tutor session with " . theme('eto_user', $tutor, TRUE) . " until " . $end_string ;
+      $output .= ' <span class="cancel-this">' . l('[cancel]', appointment_url("", $a->appointment_id, $a->appointment_event_id, 'cancel')) . '</span>';
+      $output .= "</li>";
 
     }
     $output .= "</ul>";
