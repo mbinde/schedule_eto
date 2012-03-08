@@ -3680,16 +3680,23 @@ function user_upcoming_appointment_display_block($account) {
       $end_string = date_format($end, TIME_FORMAT_ETO_STANDARD);
 
       if (user_access("is a tutor", $account)) {
-        $student = eto_user_load($participants[0]);
-        $name = theme('eto_user', $student, TRUE);
+        if ($participants) {
+          $student = eto_user_load($participants[0]);
+          $name = theme('eto_user', $student, TRUE);
+          $string = "$start_string: tutor session with $name until $end_string";
+        }
+        else {
+          $string = "$start_string: personal time until $end_string";
+        }
       }
       else {
         $tutor = eto_user_load($a->tutor_uid);
         $name = theme('eto_user', $tutor, TRUE);
+        $string = "$start_string: tutor session with $name until $end_string";
       }
 
       $output .= "<li>" ;
-      $output .= "$start_string: tutor session with $name until $end_string";
+      $output .= $string;
       $output .= ' <span class="cancel-this">' . l('[cancel]', appointment_url("", $a->appointment_id, $a->appointment_event_id, 'cancel')) . '</span>';
       $output .= "</li>";
 
