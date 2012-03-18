@@ -2481,10 +2481,9 @@ function sb_appointment_submit_handler($form, &$form_state) {
       }
 
       // then SMS if we asked for it and can
-      $method = notifications_user_setting('send_method', $tutor);
-      if (($method == 'sms') && ($tutor->sms_user[0]['number'] > 0) && ($tutor->sms_user[0]['status'] == 2)) {
+      if (can_text($tutor)) {
 	watchdog('eto_notifications',
-		 'Texting confirmation to @tutor_name (@tutor_id)',
+		 'Texting confirmation to tutor @tutor_name (@tutor_id)',
 		 array('@tutor_name' => $tutor->name,
 		       '@tutor_id' => $tutor->uid));
 
@@ -2535,6 +2534,16 @@ function sb_appointment_submit_handler($form, &$form_state) {
             '@start_time' => $start_time,
             '@end_time' => $end_time,
           ));
+      }
+      if (can_text($u)) {
+	watchdog('eto_notifications',
+		 'Texting confirmation to student @u_name (@u_id)',
+		 array('@u_name' => $u->name,
+		       '@u_id' => $u->uid));
+
+	$texts[] = array ('uid' => $u->uid,
+			  'message' => "ETO session booked $short_app_date $start_time - $end_time",
+			  );
       }
 
       if (can_email_parent($u)) {
@@ -2605,6 +2614,16 @@ function sb_appointment_submit_handler($form, &$form_state) {
                 '@end_time' => $end_time,
               ));
           }
+	  if (can_text($u)) {
+	    watchdog('eto_notifications',
+		     'Texting confirmation to student @u_name (@u_id)',
+		     array('@u_name' => $u->name,
+			   '@u_id' => $u->uid));
+
+	    $texts[] = array ('uid' => $u->uid,
+			      'message' => "ETO session booked $short_app_date $start_time - $end_time",
+			      );
+	  }
           if (can_email_parent($u)) {
             $name = $u->eto_profile->first_name . " " . $u->eto_profile->last_name;
             $messages[] = array('email' => $u->eto_profile->email_parent,
@@ -3240,8 +3259,7 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
           '@tutor_id' => $tutor->uid));
 
       // then SMS if we asked for it and can
-      $method = notifications_user_setting('send_method', $tutor);
-      if (($method == 'sms') && ($tutor->sms_user[0]['number'] > 0) && ($tutor->sms_user[0]['status'] == 2)) {
+      if (can_text($tutor)) {
 	watchdog('eto_notifications',
 		 'Texting cancellation to @tutor_name (@tutor_id)',
 		 array('@tutor_name' => $tutor->name,
@@ -3260,7 +3278,7 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
     }
     else {
       watchdog('eto_notifications',
-        'Failed to email cancellation to @tutor_name (@tutor_id)',
+        'Failed to email cancellation to tutor @tutor_name (@tutor_id)',
         array('@tutor_name' => $tutor->name,
           '@tutor_id' => $tutor->uid));
     }
@@ -3300,6 +3318,22 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
             '@start_time' => $start_time,
             '@end_time' => $end_time,
           ));
+      }
+      if (can_text($u)) {
+	watchdog('eto_notifications',
+		 'Texting cancellation to student @tutor_name (@tutor_id)',
+		 array('@tutor_name' => $u->name,
+		       '@tutor_id' => $u->uid));
+
+        if ($isa_series) {
+          $message = "ETO standing appointment cancelled $short_app_date $start_time - $end_time";
+        }
+        else {
+          $message = "ETO appointment cancelled $short_app_date $start_time - $end_time";
+        }
+	$texts[] = array ('uid' => $u->uid,
+			  'message' => $message,
+			  );
       }
       if (can_email_parent($u)) {
 	$messages[] = array('email' => $u->eto_profile->email_parent,
@@ -3357,6 +3391,22 @@ function sb_cancel_appointment_submit_handler($form, &$form_state) {
                 '@end_time' => $end_time,
               ));
           }
+	  if (can_text($u)) {
+	    watchdog('eto_notifications',
+		     'Texting cancellation to student @tutor_name (@tutor_id)',
+		     array('@tutor_name' => $u->name,
+			   '@tutor_id' => $u->uid));
+
+	    if ($isa_series) {
+	      $message = "ETO standing appointment cancelled $short_app_date $start_time - $end_time";
+	    }
+	    else {
+	      $message = "ETO appointment cancelled $short_app_date $start_time - $end_time";
+	    }
+	    $texts[] = array ('uid' => $u->uid,
+			      'message' => $message,
+			      );
+	  }
 	  if (can_email_parent($u)) {
 	    $messages[] = array('email' => $u->eto_profile->email_parent,
                           'date' => $app_date,
