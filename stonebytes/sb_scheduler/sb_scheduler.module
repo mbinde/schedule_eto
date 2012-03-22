@@ -1697,6 +1697,29 @@ function sb_appointment_date_load ($start, $end, $clause = "") {
   return $nodes;
 }
 
+function sb_appointment_find_conflicts ($uid, $start, $end) {
+  $result = db_query("SELECT sae.*, sa.tutor_uid, sa.appointment_type, sa.title
+                        FROM sb_appointment_event AS sae
+                          INNER JOIN sb_appointment AS sa ON sae.appointment_id = sa.appointment_id
+                          LEFT JOIN sb_appointment_participants AS sap ON sae.appointment_id = sap.appointment_id
+                        WHERE (    ( (sae.start_datetime_utc >= '%s') && (sae.start_datetime_utc < '%s') )
+                                OR ( (sae.end_datetime_utc > '%s') && (sae.end_datetime_utc <= '%s') ) )
+                          AND (sa.tutor_uid = %d OR sap.participant_uid = %d)
+                          AND sae.status_flag = 1
+                          AND sa.status_flag = 1
+                        ORDER BY sae.start_datetime_utc ASC",
+            $start, $end,
+            $start, $end,
+            $uid, $uid
+  );
+
+  $nodes = array();
+  while ($obj = db_fetch_object($result)) {
+    $nodes[] = $obj;
+  }
+  return $nodes;
+}
+
 
 // given a schedule ID and optionally a schedule event, load everything associated with it
 function sb_appointment_by_schedule_id_load($args) {

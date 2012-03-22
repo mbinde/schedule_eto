@@ -2296,6 +2296,10 @@ function sb_appointment_validate($form, &$form_state) {
       $date = date_create($date);
       date_timezone_set($date, timezone_open('UTC'));
       $form_state['values']['start_datetime_utc'] = date_format($date, DATE_FORMAT_DATETIME);
+
+      $interval = new DateInterval('PT' . $form_state['values']['participants']['rates']['duration'] . 'M');
+      $end_date = date_add($date, $interval);
+      $form_state['values']['end_datetime_utc'] = date_format($end_date, DATE_FORMAT_DATETIME);
     }
     $verify_block = FALSE;
   }
@@ -2313,14 +2317,13 @@ function sb_appointment_validate($form, &$form_state) {
   $tutor = eto_user_load($form_state['values']['participants']['tutor_uid']);
 
   $avail = _available_durations($form_state['values']['start_datetime_utc'], $tutor->uid, $form_state['values']['participants']['appointment_type'], $verify_block);
-
   if ($form_state['values']['participants']['appointment_type'] == PERSONAL_SESSION) {
     $max = 180;
   } else {
     $max = 60;
   }
   if ( ($form_state['values']['participants']['rates']['duration'] <= 0) || ($form_state['values']['participants']['rates']['duration'] > $max) || (! in_array($form_state['values']['participants']['rates']['duration'], $avail))) {
-    form_set_error("duration", "'" . $form_state['values']['participants']['rates']['duration'] . "' is not a valid session duration.");
+    form_set_error("duration", "'" . $form_state['values']['participants']['rates']['duration'] . "' is not a valid session duration for this start time. You or the student have a conflicting appointment starting after this one. Please choose a shorter duration or a different time.");
   }
 
   if ($form_state['values']['participants']['appointment_type'] == TUTOR_SESSION) {
@@ -2338,8 +2341,19 @@ function sb_appointment_validate($form, &$form_state) {
       if ($result > 0) {
 	form_set_error("student_" . $i, $s->name . " is busy at that time.", "error");
       }
+      // check if the tutor has an appointment scheduled right now as well
+      $conflicting_appointment = sb_appointment_find_conflicts(
+        $tutor->uid,
+        $form_state['values']['start_datetime_utc'],
+        $form_state['values']['end_datetime_utc'],
+        TRUE
+      );
+      if ($conflicting_appointment) {
+	form_set_error('start_time', 'Sorry, you are busy at that time and you can\'t book two appointments at the same time.', "error");
+      }
     }
   } else {
+    // group session
     for ($i = 1; $i<= 100; $i++) {
       if (isset($form_state['values']['participants']['student_' . $i])
 	  && ($form_state['values']['participants']['student_' . $i] > 0)) {
