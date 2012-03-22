@@ -837,7 +837,7 @@ function callback_user_calendar_fetch ($target_date = "", $target_user = "", $re
     (($target_user->uid == $user->uid) || (user_access("administer the site"))) ) {
 
     $url = 'users/' . $target_user->name . '/schedule/date/' . date_format($target_date, 'Y/m/d');
-    $output .= '<p>' . l('Click here to schedule an appointment with a student.', $url) . '</p>';
+    $output .= '<p>' . l('Click here go to the scheduling screen for this day.', $url) . '</p>';
   }
 
   if ($vacation) {
