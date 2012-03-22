@@ -1773,14 +1773,14 @@ function theme_appointment_details ($appointment, $first, $last, $event) {
       $output .= "<br><span>Canceled in error? " . l('Reinstate this appointment series.', "appointments/" . sb_encode($appointment->appointment_id) . "/reinstate") . "</span>";
     }
   } else if (user_access('view all appointments') || ($appointment->tutor_uid == $user->uid)) {
-    $event_date = date_make_date($event->start_datetime_utc, "UTC");
-    date_timezone_set($event_date, timezone_open(user_tz()));
-    $short_date = date_format($event_date, DATE_FORMAT_ETO_ABBREVIATED);
+    $appointment_date = date_make_date($appointment->start_datetime_utc, "UTC");
+    date_timezone_set($appointment_date, timezone_open(user_tz()));
+    $short_date = date_format($appointment_date, DATE_FORMAT_ETO_ABBREVIATED);
     $output .= "<br><span class='canceled'>" . l('* Cancel all appointments in this series after today.', appointment_url("", $appointment->appointment_id, "", "cancel")) . "</span>";
-    $output .= "<br><span class='canceled'>" . l("* Cancel all future appointments on or after $short_date.", appointment_url("", $event->appointment_id, $event->appointment_event_id, "cancel-from")) . "</span>";
+    $output .= "<br><span class='canceled'>" . l("* Cancel all future appointments on or after $short_date.", appointment_url("", $appointment->appointment_id, $appointment->appointment_event_id, "cancel-from")) . "</span>";
   }
 
-  if ($event) {
+  if ($appointment) {
     $output .= theme_cancellations_summary($event);
   }
 
@@ -2323,7 +2323,7 @@ function sb_appointment_validate($form, &$form_state) {
     $max = 60;
   }
   if ( ($form_state['values']['participants']['rates']['duration'] <= 0) || ($form_state['values']['participants']['rates']['duration'] > $max) || (! in_array($form_state['values']['participants']['rates']['duration'], $avail))) {
-    form_set_error("duration", "'" . $form_state['values']['participants']['rates']['duration'] . "' is not a valid session duration for this start time. You or the student have a conflicting appointment starting after this one. Please choose a shorter duration or a different time.");
+    form_set_error("duration", "'" . $form_state['values']['participants']['rates']['duration'] . "' is not a valid session duration for this start time. You or the student have a conflicting appointment starting after this one. Please choose a shorter duration or a different starting time.");
   }
 
   if ($form_state['values']['participants']['appointment_type'] == TUTOR_SESSION) {
