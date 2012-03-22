@@ -102,13 +102,19 @@ function _schedule_tabs($user, $id, $active) {
 
 
 
-function user_calendar_display($target_user = "") {
+function user_calendar_display($target_user = "", $year = "", $month = "", $day = "") {
   global $user;
 
-  $r = sb_check_permissions($target_user, "view others schedule");
+  if ($year && $month && $day) {
+    $date = "$month/$day/$year";
+  }
+  else {
+    $date = '';
+  }
 
-  if ($target_user) {
-    $target_user = $r;
+  if ($target_user && ($target_user != 'user')) {
+    $user_obj = sb_check_permissions($target_user, "view others schedule");
+    $target_user = $user_obj;
     $base_path = 'users/' . $target_user->name . '/calendar';
   } else {
     $target_user = $user;
@@ -123,11 +129,11 @@ function user_calendar_display($target_user = "") {
     }
   }
 
-  return user_calendar_display_block($target_user, FALSE);
+  return user_calendar_display_block($target_user, FALSE, $date);
 }
 
 
-function user_calendar_display_block ($target_user, $perm_check = TRUE) {
+function user_calendar_display_block ($target_user, $perm_check = TRUE, $date = '') {
   $output = "";
   global $user;
 
@@ -163,9 +169,11 @@ function user_calendar_display_block ($target_user, $perm_check = TRUE) {
   jquery_ui_add('ui.datepicker');
   drupal_add_js(drupal_get_path('module', 'sb_scheduler') . '/js/choose-date.js');
 
-  $today = date('m/d/Y');
+  if (!$date) {
+    $date = date('m/d/Y');
+  }
   $output .= "<h2>Appointment Calendar for " . $target_user->name . ":</h2>";
-  $output .= '<div id="show-calendar" class="caller-' . $user->name . '"></div><div id="date-details">' . callback_user_calendar_fetch($today, $target_user->name, 1) . '</div>';
+  $output .= '<div id="show-calendar" class="caller-' . $user->name . '"></div><div id="date-details">' . callback_user_calendar_fetch($date, $target_user->name, 1) . '</div>';
 
   return $output;
 }
@@ -193,10 +201,10 @@ function sb_edit_schedule_block($target_user = "", $id = "", $time_type = "") {
     $array = sb_parse_arg($id);
     $id = $array[0];
   }
-  $r = sb_check_permissions($target_user, "view others schedule");
 
   if ($target_user) {
-    $target_user = $r;
+    $user_obj = sb_check_permissions($target_user, "view others schedule");
+    $target_user = $user_obj;
     $base_path = 'users/' . $target_user->name . '/calendar/add';
   } else {
     $target_user = $user;
@@ -762,7 +770,6 @@ function user_schedule_display($target_user = "") {
 function callback_user_calendar_fetch ($target_date = "", $target_user = "", $return_data = 0) {
 
   $output = "";
-
   if (! ($target_date || $target_user) ) {
     // js called, rather than php
     $target_date = $_POST['date']; // MM/DD/YYYY
@@ -2690,7 +2697,11 @@ function sb_appointment_submit_handler($form, &$form_state) {
     $verb = "created";
   }
 
-  $calendar = 'users/' . $tutor->name . '/schedule';
+  $date = date_make_date($form_state['values']['start_datetime_utc'], "UTC");
+  date_timezone_set($date, timezone_open(user_tz($tutor)));
+  $date_string = date_format($date, 'Y/m/d');
+
+  $calendar = 'users/' . $tutor->name . '/calendar/date/' . $date_string;
 
   drupal_set_message("Your appointment has been $verb successfully. " . l("Click here to return to " . $tutor->name . "'s calendar.", $calendar), "success");
   // this is annoying, why is ahah_helper not clearing storage?
@@ -3667,7 +3678,12 @@ function _available_durations($start = '', $uid = '', $type = "", $verify_block 
     $block_date = date_make_date($block->end_datetime_utc, "UTC");
   }
   $start_date = date_make_date($start, "UTC");
-  $app_date = date_make_date($appointment->start_datetime_utc, "UTC");
+  if ($appointment) {
+    $app_date = date_make_date($appointment->start_datetime_utc, "UTC");
+  }
+  else {
+    $app_date = '';
+  }
 
   // our comparison date is whichever happens first: next appointment or end of our block of time
   if (! $app_date) {
@@ -3683,8 +3699,15 @@ function _available_durations($start = '', $uid = '', $type = "", $verify_block 
     $limit_date = $app_date;
   }
 
-  // get the number of seconds between them
-  $seconds = date_format($limit_date, "U") - date_format($start_date, "U");
+  // get the number of seconds between them if we can
+  if ($limit_date != -1) {
+    $seconds = date_format($limit_date, "U") - date_format($start_date, "U");
+  }
+  else {
+    // no limit at all, since we don't have anything scheduled after this
+    $seconds = 86400; // arbitrarily large number
+  }
+
   $minutes = $seconds / 60;
 
   // round up to the nearest multiple of 15

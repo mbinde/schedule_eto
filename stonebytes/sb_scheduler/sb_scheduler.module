@@ -126,6 +126,15 @@ function sb_scheduler_menu() {
 				   'menu_name' => 'tutor-student-links',
 				   'access arguments' => array('create appointments'),
 				   );
+  $items['user/calendar/date/%'] = array (
+				   'title' => 'My Calendar',
+				   'page callback' => 'user_calendar_display',
+                                   'page arguments' => array(0, 3, 4, 5),
+				   'type' => MENU_NORMAL_ITEM,
+				   'file' => 'schedule.pages.inc',
+				   'menu_name' => 'tutor-student-links',
+				   'access arguments' => array('create appointments'),
+				   );
 
   // only tutors can add schedule items
   $items['user/calendar/add'] = array (
@@ -184,6 +193,15 @@ function sb_scheduler_menu() {
 				      'file' => 'schedule.pages.inc',
 				      'access arguments' => array('access content'),
 				      );
+  $items['users/%/calendar/date/%'] = array (
+				   'title' => 'My Calendar',
+				   'page callback' => 'user_calendar_display',
+                                   'page arguments' => array(1, 4, 5, 6),
+				   'type' => MENU_NORMAL_ITEM,
+				   'file' => 'schedule.pages.inc',
+				   'menu_name' => 'tutor-student-links',
+				   'access arguments' => array('create appointments'),
+				   );
   $items['users/%/calendar/add'] = array (
 				       'page callback' => 'sb_edit_schedule_block',
 				       'page arguments' => array(1),
