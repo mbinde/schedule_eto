@@ -1109,7 +1109,8 @@ function callback_user_schedule_fetch ($target_date = "", $target_user = "", $re
   // add a link to manually schedule an appointment
   if ( ($target_user->uid == $user->uid) || user_access("administer the site") ) {
     $url = 'users/' . $target_user->name . '/schedule/appointment/' . sb_encode(date_format($target_date, DATE_FORMAT_DATETIME));
-    $output .= '<p>' . l('Click here to schedule an appointment at a time that isn\'t listed.', $url) . '</p>';
+    $output .= '<p>1) To schedule an appointment at a listed time, click the time below.</p>';
+    $output .= '<p>' . l('2) To schedule an appointment at a time that isn\'t listed, click here.', $url) . '</p>';
   }
 
   if ($vacation) {
