@@ -109,6 +109,14 @@ function sb_scheduler_menu() {
 				   'file' => 'schedule.pages.inc',
 				   'access arguments' => array('create schedule'),
 				   );
+  $items['user/schedule/date/%'] = array (
+				   'title' => 'Add an appointment',
+				   'page callback' => 'user_schedule_display',
+                                   'page arguments' => array(0, 3, 4, 5),
+				   'type' => MENU_CALLBACK,
+				   'file' => 'schedule.pages.inc',
+				   'access arguments' => array('create schedule'),
+				   );
 
   $items['users/%/schedule'] = array (
 				      'title arguments' => array(1),
@@ -118,6 +126,15 @@ function sb_scheduler_menu() {
 				      'file' => 'schedule.pages.inc',
 				      'access arguments' => array('access content'),
 				      );
+  $items['users/%/schedule/date/%'] = array (
+				   'title' => 'Add an appointment',
+				   'page callback' => 'user_schedule_display',
+                                   'page arguments' => array(1, 4, 5, 6),
+				   'type' => MENU_CALLBACK,
+				   'file' => 'schedule.pages.inc',
+				   'access arguments' => array('create schedule'),
+				   );
+
   $items['user/calendar'] = array (
 				   'title' => 'My Calendar',
 				   'page callback' => 'user_calendar_display',
@@ -130,9 +147,8 @@ function sb_scheduler_menu() {
 				   'title' => 'My Calendar',
 				   'page callback' => 'user_calendar_display',
                                    'page arguments' => array(0, 3, 4, 5),
-				   'type' => MENU_NORMAL_ITEM,
+				   'type' => MENU_CALLBACK,
 				   'file' => 'schedule.pages.inc',
-				   'menu_name' => 'tutor-student-links',
 				   'access arguments' => array('create appointments'),
 				   );
 

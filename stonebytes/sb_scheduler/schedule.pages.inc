@@ -732,12 +732,19 @@ function tutor_schedule_options ($base_path, $page, $appendix = "") {
 }
 
 
-function user_schedule_display($target_user = "") {
+function user_schedule_display($target_user = "", $year = "", $month = "", $day = "") {
   jquery_ui_add('ui.datepicker');
   drupal_add_js(drupal_get_path('module', 'sb_scheduler') . '/js/choose-date.js');
   global $user;
 
-  if ($target_user) {
+  if ($year && $month && $day) {
+    $date = "$month/$day/$year";
+  }
+  else {
+    $date = '';
+  }
+
+  if ($target_user && ($target_user != 'user')) {
     $target_user = eto_user_load(array('name' => $target_user));
     $message = "<h2>Select a date and time to schedule an tutor session with " . theme('eto_user', $target_user) . ":</h2>";
     if (user_access("administer the site", $user)) {
@@ -757,8 +764,10 @@ function user_schedule_display($target_user = "") {
   $output .= $header;
   $output .= $message;
 
-  $today = date('m/d/Y');
-  $output .= '<div id="choose-date"></div><div id="date-details">' . callback_user_schedule_fetch($today, $target_user->name, 1) . '</div>';
+  if (!$date) {
+    $date = date('m/d/Y');
+  }
+  $output .= '<div id="choose-date"></div><div id="date-details">' . callback_user_schedule_fetch($date, $target_user->name, 1) . '</div>';
 
   return $output;
 }
@@ -827,7 +836,7 @@ function callback_user_calendar_fetch ($target_date = "", $target_user = "", $re
   if (user_access("is a tutor", $target_user) &&
     (($target_user->uid == $user->uid) || (user_access("administer the site"))) ) {
 
-    $url = 'users/' . $target_user->name . '/schedule/appointment/' . sb_encode(date_format($target_date, DATE_FORMAT_DATETIME));
+    $url = 'users/' . $target_user->name . '/schedule/date/' . date_format($target_date, 'Y/m/d');
     $output .= '<p>' . l('Click here to schedule an appointment with a student.', $url) . '</p>';
   }
 
