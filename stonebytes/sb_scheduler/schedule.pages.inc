@@ -746,14 +746,14 @@ function user_schedule_display($target_user = "", $year = "", $month = "", $day 
 
   if ($target_user && ($target_user != 'user')) {
     $target_user = eto_user_load(array('name' => $target_user));
-    $message = "<h2>Select a date and time to schedule an tutor session with " . theme('eto_user', $target_user) . ":</h2>";
+    $message = "<h2>Select a date to schedule an tutor session with " . theme('eto_user', $target_user) . ":</h2>";
     if (user_access("administer the site", $user)) {
       $header = tutor_schedule_options(sb_user_base($target_user), "schedule", " for " . $target_user->name);
     }
   } else {
     $target_user = $user;
     $header = tutor_schedule_options(sb_user_base($target_user), "schedule");
-    $message = "<h2>Select a date and time to schedule some personal time or a tutor session with a student:</h2>";
+    $message = "<h2>Select a date to schedule some personal time or a tutor session with a student:</h2>";
   }
   if (!$target_user) {
     drupal_not_found();
@@ -1109,7 +1109,7 @@ function callback_user_schedule_fetch ($target_date = "", $target_user = "", $re
   // add a link to manually schedule an appointment
   if ( ($target_user->uid == $user->uid) || user_access("administer the site") ) {
     $url = 'users/' . $target_user->name . '/schedule/appointment/' . sb_encode(date_format($target_date, DATE_FORMAT_DATETIME));
-    $output .= '<p>' . l('Click here to schedule an appointment with a student.', $url) . '</p>';
+    $output .= '<p>' . l('Click here to schedule an appointment at a time that isn\'t listed.', $url) . '</p>';
   }
 
   if ($vacation) {
