@@ -720,6 +720,7 @@ function tutor_schedule_options ($base_path, $page, $appendix = "") {
   if ($page == "schedule") {
     //    $output .= "<li>" . l("Schedule availability" . $appendix, $base_path . '/calendar/add') . "</li>";
     //    $output .= "<li>" . l("Add vacation days" . $appendix, $base_path . '/calendar/add/vacation') . "</li>";
+    $output .= "<li>" . l("Click here to add vacation days" . $appendix, $base_path . '/calendar/add/vacation') . "</li>";
     //    $output .= "<li>" . "Select a date and time to either:";
     //    $output .= "<ul><li>block off personal time</li><li>or schedule a tutor session</li></ul>";
   } else {
