@@ -718,10 +718,10 @@ function sb_schedule_event_reinstate ($event_id) {
 function tutor_schedule_options ($base_path, $page, $appendix = "") {
   $output = "<ul>";
   if ($page == "schedule") {
-    $output .= "<li>" . l("Schedule availability" . $appendix, $base_path . '/calendar/add') . "</li>";
-    $output .= "<li>" . l("Add vacation days" . $appendix, $base_path . '/calendar/add/vacation') . "</li>";
-    $output .= "<li>" . "Select a date and time to either:";
-    $output .= "<ul><li>block off personal time</li><li>or schedule a tutor session</li></ul>";
+    //    $output .= "<li>" . l("Schedule availability" . $appendix, $base_path . '/calendar/add') . "</li>";
+    //    $output .= "<li>" . l("Add vacation days" . $appendix, $base_path . '/calendar/add/vacation') . "</li>";
+    //    $output .= "<li>" . "Select a date and time to either:";
+    //    $output .= "<ul><li>block off personal time</li><li>or schedule a tutor session</li></ul>";
   } else {
     $output .= "<li>" . l("Schedule availability" . $appendix, $base_path . '/calendar/add') . "</li>";
     $output .= "<li>" . l("Add vacation days" . $appendix, $base_path . '/calendar/add/vacation') . "</li>";
@@ -753,7 +753,7 @@ function user_schedule_display($target_user = "", $year = "", $month = "", $day 
   } else {
     $target_user = $user;
     $header = tutor_schedule_options(sb_user_base($target_user), "schedule");
-    $message = "<h2>Select a date to schedule some personal time or a tutor session with a student:</h2>";
+    $message = "<h2>Select a date to schedule something:</h2>";
   }
   if (!$target_user) {
     drupal_not_found();
