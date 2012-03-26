@@ -159,9 +159,23 @@ function sb_scheduler_menu() {
 				       'file' => 'schedule.pages.inc',
 				       'access arguments' => array('create schedule'),
 				       );
+  $items['user/calendar/add/date/%'] = array (
+				       'page callback' => 'sb_edit_schedule_block',
+                                       'page arguments' => array(0, '', '', 4, 5, 6),
+				       'type' => MENU_CALLBACK,
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
 
   $items['user/calendar/add/vacation'] = array (
 				       'page callback' => 'sb_add_vacation',
+				       'type' => MENU_CALLBACK,
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
+  $items['user/calendar/add/vacation/date/%'] = array (
+				       'page callback' => 'sb_add_vacation',
+                                       'page arguments' => array(0, 5, 6, 7),
 				       'type' => MENU_CALLBACK,
 				       'file' => 'schedule.pages.inc',
 				       'access arguments' => array('create schedule'),
@@ -225,10 +239,24 @@ function sb_scheduler_menu() {
 				       'file' => 'schedule.pages.inc',
 				       'access arguments' => array('create schedule'),
 				       );
+  $items['users/%/calendar/add/date/%'] = array (
+				       'page callback' => 'sb_edit_schedule_block',
+                                       'page arguments' => array(1, '', '', 5, 6, 7),
+				       'type' => MENU_CALLBACK,
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
   $items['users/%/calendar/add/vacation'] = array (
 				       'page callback' => 'sb_add_vacation',
 				       'type' => MENU_CALLBACK,
 				       'page arguments' => array(1),
+				       'file' => 'schedule.pages.inc',
+				       'access arguments' => array('create schedule'),
+				       );
+  $items['users/%/calendar/add/vacation/date/%'] = array (
+                                       'page callback' => 'sb_add_vacation',
+                                       'page arguments' => array(1, 6, 7, 8),
+				       'type' => MENU_CALLBACK,
 				       'file' => 'schedule.pages.inc',
 				       'access arguments' => array('create schedule'),
 				       );

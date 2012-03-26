@@ -159,10 +159,10 @@ function user_calendar_display_block ($target_user, $perm_check = TRUE, $date = 
   }
 
   if (user_access('create schedule')) {
-    $output .= "<div id='calendar-controls'>\n";
-    $output .= "<h2>Modify your calendar:</h2>\n";
-    $output .= tutor_schedule_options (sb_user_base($target_user), "calendar", $appendix);
-    $output .= "</div>\n";
+    //    $output .= "<div id='calendar-controls'>\n";
+    //    $output .= "<h2>Modify your calendar:</h2>\n";
+    //    $output .= tutor_schedule_options (sb_user_base($target_user), "calendar", $appendix);
+    //    $output .= "</div>\n";
   }
   $events = sb_schedule_uid_load($target_user->uid, TRUE);
 
@@ -181,13 +181,13 @@ function user_calendar_display_block ($target_user, $perm_check = TRUE, $date = 
 
 /* small stub for vacations that redirects to sb_edit_schedule_block */
 
-function sb_add_vacation($target_user = "") {
-  return sb_edit_schedule_block($target_user, "", SCHEDULE_VACATION);
+function sb_add_vacation($target_user = "", $year = "", $month = "", $day = "") {
+  return sb_edit_schedule_block($target_user, "", SCHEDULE_VACATION, $year, $month, $day);
 }
 
 /* adds a block of time */
 
-function sb_edit_schedule_block($target_user = "", $id = "", $time_type = "") {
+function sb_edit_schedule_block($target_user = "", $id = "", $time_type = "", $year = "", $month = "", $day = "") {
   global $user;
 
   // we might be adding vacation, so check our args;
@@ -201,8 +201,7 @@ function sb_edit_schedule_block($target_user = "", $id = "", $time_type = "") {
     $array = sb_parse_arg($id);
     $id = $array[0];
   }
-
-  if ($target_user) {
+  if ($target_user && ($target_user != 'user')) {
     $user_obj = sb_check_permissions($target_user, "view others schedule");
     $target_user = $user_obj;
     $base_path = 'users/' . $target_user->name . '/calendar/add';
@@ -224,6 +223,9 @@ function sb_edit_schedule_block($target_user = "", $id = "", $time_type = "") {
       $node->schedule_type = $time_type;
     }
     drupal_set_title('Add a new block of scheduled time');
+  }
+  if ($year && $month && $day) {
+    $node->start_datetime_owner = "$year-$month-$day 00:00:00";
   }
 
   if ($node->schedule_type == SCHEDULE_VACATION) {
@@ -720,7 +722,7 @@ function tutor_schedule_options ($base_path, $page, $appendix = "") {
   if ($page == "schedule") {
     //    $output .= "<li>" . l("Schedule availability" . $appendix, $base_path . '/calendar/add') . "</li>";
     //    $output .= "<li>" . l("Add vacation days" . $appendix, $base_path . '/calendar/add/vacation') . "</li>";
-    $output .= "<li>" . l("Click here to add vacation days" . $appendix, $base_path . '/calendar/add/vacation') . "</li>";
+    //    $output .= "<li>" . l("Click here to add vacation days" . $appendix, $base_path . '/calendar/add/vacation') . "</li>";
     //    $output .= "<li>" . "Select a date and time to either:";
     //    $output .= "<ul><li>block off personal time</li><li>or schedule a tutor session</li></ul>";
   } else {
@@ -852,20 +854,19 @@ function callback_user_calendar_fetch ($target_date = "", $target_user = "", $re
     date_timezone_set($end, timezone_open(user_tz()));
     $end = date_add($end, $interval);
 
-    $output .= "<p><em>"
+    $output .= "<p><strong><em>"
       . ( ($target_user->uid == $user->uid) ? "You are " : $target_user->name . " is ")
       . " on vacation from "
       . date_format($start, DATE_FORMAT_ETO_LONG_NO_YEAR)
       . " to "
       . date_format($end, DATE_FORMAT_ETO_LONG_NO_YEAR)
-      . "</em> "
+      . "</em></strong> "
       . l("[edit]", schedule_url($base_user_url, $v->schedule_id, "", "edit"))
       . "</p>";
 
-    if ($target_user->uid == $user->uid) {
-      $output .= "<p>No new appointments will be allowed to be scheduled today due to your vacation.</p>\n";
-    } else {
-      $output .= "<p>No new appointments can be scheduled during a tutor's vacation.</p>\n";
+    global $user;
+    if ($target_user->uid != $user->uid) {
+      $output .= "<p><strong>New appointments can't be scheduled during a tutor's vacation.</strong></p>\n";
     }
 
   }
@@ -1109,9 +1110,29 @@ function callback_user_schedule_fetch ($target_date = "", $target_user = "", $re
 
   // add a link to manually schedule an appointment
   if ( ($target_user->uid == $user->uid) || user_access("administer the site") ) {
-    $url = 'users/' . $target_user->name . '/schedule/appointment/' . sb_encode(date_format($target_date, DATE_FORMAT_DATETIME));
-    $output .= '<p>1) To schedule an appointment at a listed time, click the time below.</p>';
-    $output .= '<p>' . l('2) To schedule an appointment at a time that isn\'t listed, click here.', $url) . '</p>';
+
+    $base_path = sb_user_base($target_user);
+    if (user_access('create schedule')) {
+      if ($target_user->uid != $user->uid) {
+	$appendix = " for " . $target_user->name;
+      }
+    }
+
+    $output .= '<ol>';
+    $output .= '<li>To schedule an appointment' . $appendix . ' at a listed time, click the time below.</li>';
+    $output .= '<li>' .
+      l('To schedule an appointment' . $appendix . ' at a time that isn\'t listed, click here.',
+	'users/' . $target_user->name . '/schedule/appointment/' . sb_encode(date_format($target_date, DATE_FORMAT_DATETIME)))
+      . '</li>';
+    $output .= '<li>' .
+      l('To schedule an availability' . $appendix . ', click here',
+	$base_path . '/calendar/add/date/' . date_format($target_date, 'Y/m/d'))
+      . '</li>';
+    $output .= '<li>' .
+      l('To schedule vacation time' . $appendix . ', click here.',
+	$base_path . '/calendar/add/vacation/date/' . date_format($target_date, 'Y/m/d'))
+      . '</li>';
+    $output .= '</ol>';
   }
 
   if ($vacation) {
@@ -1132,6 +1153,13 @@ function callback_user_schedule_fetch ($target_date = "", $target_user = "", $re
       . date_format($end, DATE_FORMAT_ETO_LONG_NO_YEAR)
       . ", so new appointments cannot be scheduled.  </em>";
   } else if ($blocks) {
+
+    // it's possible to iterate through all our blocks and not display any
+    // available times (e.g. if they all occurred before now.) If we don't
+    // display any available times, we want to display the "nothing available
+    // message even if technically there had been time blocks available today.
+    // so use this flag.
+    $displayed_at_least_one_block = FALSE;
 
     $event = "";
     $events = array();
@@ -1222,6 +1250,7 @@ function callback_user_schedule_fetch ($target_date = "", $target_user = "", $re
 	    } else {
 	      $output .= l(date_format($start, 'g:ia'), $url) . " ($rate_label)" . "<br>";
 	    }
+	    $displayed_at_least_one_block = TRUE;
 	  }
 	  // if we skipped, get a new event next time through
 	  if ($skipped > 0) {
@@ -1244,6 +1273,9 @@ function callback_user_schedule_fetch ($target_date = "", $target_user = "", $re
       $output .= "<p></p>";
     }
 
+    if (! $displayed_at_least_one_block) {
+      $output .= "<em>No available times found, please try another day.</em>";
+    }
 
   } else {
     $output .= "<em>No available times found, please try another day.</em>";
@@ -1340,12 +1372,13 @@ function sb_schedule_form($form_state, $node) {
   if ($node->schedule_type == SCHEDULE_AVAILABILITY) {
     // time isn't an option with vacations
 
+    // '#default_value' => ($node->start_datetime_owner ? $node->start_datetime_owner : ""),
     $form['start_time'] = array (
       '#type' => 'textfield',
       '#field_suffix' => $timezone_suffix,
       '#title' => 'Start Time' . $timezone_suffix,
-      '#default_value' => ($node->start_datetime_owner ? $node->start_datetime_owner : ""),
       '#description' => "Format: 9:30am",
+      '#default_value' => '',
       '#required' => TRUE,
       '#size' => 8,
       '#attributes' => array ('tabindex' => 1),
@@ -1353,7 +1386,7 @@ function sb_schedule_form($form_state, $node) {
     $form['end_time'] = array (
       '#type' => 'textfield',
       '#title' => 'End Time' . $timezone_suffix,
-      '#default_value' => ($node->end_datetime_owner ? $node->end_datetime_owner : ""),
+      '#default_value' => '',
       '#description' => "Format: 9:30am",
       '#size' => 8,
       '#required' => TRUE,
@@ -1498,7 +1531,9 @@ function sb_schedule_submit_handler($form, &$form_state) {
     }
 
     drupal_set_message("Your $noun has been $verb successfully.", "success");
-    $form_state['redirect'] = $base_user_url . "/calendar";
+
+    date_timezone_set($start, timezone_open(user_tz()));
+    $form_state['redirect'] = $base_user_url . "/calendar/date/" . date_format($start, "Y/m/d");
   }
 }
 
