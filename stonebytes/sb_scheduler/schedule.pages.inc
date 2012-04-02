@@ -1674,12 +1674,17 @@ function sb_schedule_insert_repeat_event ($node, $parent_id) {
  *****************************************************************************/
 
 function sb_appointment_view($arg) {
-  $array = sb_parse_arg($arg);
-
-  if ($array[1]) {
-    $requested_event_id = $array[1];
+  if(is_numeric($arg)) {
+    $id = $arg;
   }
-  $id = $array[0];
+  else {
+    $array = sb_parse_arg($arg);
+
+    if ($array[1]) {
+      $requested_event_id = $array[1];
+    }
+    $id = $array[0];
+  }
 
   //
   // 2 ways we can view an appointment:
