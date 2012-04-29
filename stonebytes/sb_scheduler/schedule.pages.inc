@@ -1246,9 +1246,9 @@ function callback_user_schedule_fetch ($target_date = "", $target_user = "", $re
 	    // only show if it's after our unavailable time
 	    if ($grey && ($start < $grey)) {
 	      // show greyed out
-	      $output .= "<span class='grey'>" . date_format($start, 'g:ia') . " ($rate_label) <em>Contact the tutor to schedule at this time</em><br></span>\n";
+	      $output .= "<span class='grey'>" . date_format($start, 'g:ia (T)') . " ($rate_label) <em>Contact the tutor to schedule at this time</em><br></span>\n";
 	    } else {
-	      $output .= l(date_format($start, 'g:ia'), $url) . " ($rate_label)" . "<br>";
+	      $output .= l(date_format($start, 'g:ia (T)'), $url) . " ($rate_label)" . "<br>";
 	    }
 	    $displayed_at_least_one_block = TRUE;
 	  }
